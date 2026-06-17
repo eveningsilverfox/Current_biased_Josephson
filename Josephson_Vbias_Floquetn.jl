@@ -22,7 +22,6 @@ dw0 = minimum([Gamma/5, 0.01]);
 Nev = 30; evar = delta*range(0.05, 2, Nev);
 
 #Lesser self energy
-Sigl_b = 1;
 Sigl_s = 1;
 
 #Scheme
@@ -69,7 +68,7 @@ for hi = 1:Nev
     elseif ws == 2 
         If[hi,:,:] = Keldyshsetup_Floquetn.current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, hi);
     elseif ws == 0 
-        If[hi,:,:] = Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, Sigl_b, Sigl_s, hi);
+        If[hi,:,:] = Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, Sigl_s, hi);
     end
     
     for kl = -Nf:Nf

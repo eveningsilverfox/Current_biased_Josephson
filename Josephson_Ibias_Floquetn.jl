@@ -24,7 +24,6 @@ Nev = 90; evar = delta*range(0.36, 3.0, Nev);
 tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = range(0, tmax, Nt0);
   
 #Lesser self energy
-Sigl_b = 1;
 Sigl_s = 1;
 
 #Scheme
@@ -47,7 +46,7 @@ end
 ## ----------Current----------
 # Vipsolseed = load("Vipsol_n_w2_Nf22_delta1_zeta5_T0p625_Gam1e-3_V0p38_3p0_80.jld")["Vipsol"]; Nevseed = 80;
 Vipsolseed = nothing; Nevseed = nothing;
-Iv, Vipsol, residualarr = Keldyshsetup_Floquetn.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Sigl_b, Sigl_s, Vipsolseed, Nevseed)
+Iv, Vipsol, residualarr = Keldyshsetup_Floquetn.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Sigl_s, Vipsolseed, Nevseed)
 
 dIdv = zeros(Float64, Nev); 
 for hi = 1:Nev-1
