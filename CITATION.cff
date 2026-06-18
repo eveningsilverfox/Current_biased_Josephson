@@ -1,0 +1,8 @@
+cff-version: 1.2.0
+title: "Current_biased_Josephson"
+authors:
+  - family-names: Lahiri
+    given-names: Aritra
+version: 1.0.0
+date-released: 2026-06-17
+license: MIT
