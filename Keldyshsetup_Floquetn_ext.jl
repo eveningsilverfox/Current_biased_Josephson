@@ -1256,13 +1256,13 @@ tunnelling expansion): `G< ≈ gʳ V g< + g< V gᵃ`, with `V`=[`Vwmnf`](@ref)`(
 bare propagators from [`grwmnf`](@ref)/[`glwmnf`](@ref). Optional bare GFs may be
 passed in. Selected by the `ws=2` scheme.
 """
-function Glesser_Floquet_T2(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, grwmn = nothing, gawmn = nothing, glwmn = nothing)
+function Glesser_Floquet_T2(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn = nothing, gawmn = nothing, glwmn = nothing)
     if isnothing(grwmn)
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(ww, Omega, Nf, zeta, delta, Gamma)
+        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
         gawmn = conj(transpose( grwmn ));
     end
     if isnothing(glwmn)
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(ww, Omega, Nf, zeta, delta, Gamma)
+        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
     end
     Vv = Keldyshsetup_Floquetn_ext.Vwmnf(Vip, Nf, T);
 
@@ -1278,13 +1278,13 @@ end
 LESSER Green's function of the transparency expansion kept through O(𝒯⁴) (the O(𝒯²)
 term of [`Glesser_Floquet_T2`](@ref) plus the next chain order). Scheme `ws=4`.
 """
-function Glesser_Floquet_T4(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, grwmn = nothing, gawmn = nothing, glwmn = nothing)
+function Glesser_Floquet_T4(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn = nothing, gawmn = nothing, glwmn = nothing)
     if isnothing(grwmn)
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(ww, Omega, Nf, zeta, delta, Gamma)
+        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
         gawmn = conj(transpose( grwmn ));
     end
     if isnothing(glwmn)
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(ww, Omega, Nf, zeta, delta, Gamma)
+        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
     end
     Vv = Keldyshsetup_Floquetn_ext.Vwmnf(Vip, Nf, T);
     gr_s = grwmn*Vv; s_ga = Vv*gawmn;
@@ -1302,13 +1302,13 @@ end
 
 LESSER Green's function of the transparency expansion kept through O(𝒯⁶). Scheme `ws=6`.
 """
-function Glesser_Floquet_T6(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, grwmn = nothing, gawmn = nothing, glwmn = nothing)
+function Glesser_Floquet_T6(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn = nothing, gawmn = nothing, glwmn = nothing)
     if isnothing(grwmn)
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(ww, Omega, Nf, zeta, delta, Gamma)
+        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
         gawmn = conj(transpose( grwmn ));
     end
     if isnothing(glwmn)
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(ww, Omega, Nf, zeta, delta, Gamma)
+        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
     end
     Vv = Keldyshsetup_Floquetn_ext.Vwmnf(Vip, Nf, T);
     gr_s = grwmn*Vv; s_ga = Vv*gawmn;
@@ -1327,13 +1327,13 @@ end
 
 LESSER Green's function of the transparency expansion kept through O(𝒯⁸). Scheme `ws=8`.
 """
-function Glesser_Floquet_T8(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, grwmn = nothing, gawmn = nothing, glwmn = nothing)
+function Glesser_Floquet_T8(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn = nothing, gawmn = nothing, glwmn = nothing)
     if isnothing(grwmn)
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(ww, Omega, Nf, zeta, delta, Gamma)
+        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
         gawmn = conj(transpose( grwmn ));
     end
     if isnothing(glwmn)
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(ww, Omega, Nf, zeta, delta, Gamma)
+        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
     end
     Vv = Keldyshsetup_Floquetn_ext.Vwmnf(Vip, Nf, T);
     gr_s = grwmn*Vv; s_ga = Vv*gawmn;
@@ -1388,27 +1388,27 @@ function current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, Sigl
 end
 
 """
-    current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint) -> Matrix{ComplexF64}
+    current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint) -> Matrix{ComplexF64}
 
 Floquet-mode-resolved current for phase solution `Vip`, truncated at O(𝒯²): like
 [`current_Floquet_Tfull`](@ref) but with `G<` from [`Glesser_Floquet_T2`](@ref).
 """
-function current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint)
+function current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint)
     Nw0 = length(war0); deltaw0 = abs(war0[2]-war0[1]);
 
     Vvi = Keldyshsetup_Floquetn_ext.Viwmnf(Vip, Nf, T); #Has extra tau_z Nambu Pauli matrix needed in current calculation
     
     Iiwf = zeros(ComplexF64, 2*Nf+1,2*Nf+1,Nw0);
     Threads.@threads for ij = 1:Nw0
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma);
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma);
+        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
+        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
         
-        Glwmn = Keldyshsetup_Floquetn_ext.Glesser_Floquet_T2(war0[ij], Omega, Nf, zeta, delta, T, Gamma, Vip, grwmn, conj(transpose(grwmn)), glwmn);
+        Glwmn = Keldyshsetup_Floquetn_ext.Glesser_Floquet_T2(war0[ij], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn, conj(transpose(grwmn)), glwmn);
         Itemp0 = -Vvi*Glwmn; #Has extra tau_z Nambu Pauli matrix needed in current calculation
         ##--m2--
         Threads.@threads for jk = 1:2*Nf+1
             for kl = 1:2*Nf+1          #VLR*G<RL                                               #VRL*G<LR
-                Iiwf[jk,kl,ij] = (Itemp0[2*jk-1,2*kl-1]+Itemp0[2*jk,2*kl]) - (Itemp0[2*(2*Nf+1)+2*jk-1,2*(2*Nf+1)+2*kl-1]+Itemp0[2*(2*Nf+1)+2*jk,2*(2*Nf+1)+2*kl]); #Trace in Nambu space for each Floquet mode (jk)
+                Iiwf[jk,kl,ij] = (Itemp0[4*jk-3,4*kl-3]+Itemp0[4*jk-2,4*kl-2]+Itemp0[4*jk-1,4*kl-1]+Itemp0[4*jk,4*kl]) - (Itemp0[4*(2*Nf+1)+4*jk-3,4*(2*Nf+1)+4*kl-3]+Itemp0[4*(2*Nf+1)+4*jk-2,4*(2*Nf+1)+4*kl-2]+Itemp0[4*(2*Nf+1)+4*jk-1,4*(2*Nf+1)+4*kl-1]+Itemp0[4*(2*Nf+1)+4*jk,4*(2*Nf+1)+4*kl]); #Trace in Nambu space for each Floquet mode (jk)
             end
         end
     end
@@ -1424,26 +1424,26 @@ function current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterpri
 end
 
 """
-    current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint) -> Matrix{ComplexF64}
+    current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint) -> Matrix{ComplexF64}
 
 Floquet-mode-resolved current truncated at O(𝒯⁴) (uses [`Glesser_Floquet_T4`](@ref)).
 """
-function current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint)
+function current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint)
     Nw0 = length(war0); deltaw0 = abs(war0[2]-war0[1]);
 
     Vvi = Keldyshsetup_Floquetn_ext.Viwmnf(Vip, Nf, T); #Has extra tau_z Nambu Pauli matrix needed in current calculation
     
     Iiwf = zeros(ComplexF64, 2*Nf+1,2*Nf+1,Nw0);
     Threads.@threads for ij = 1:Nw0
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma);
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma);
+        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
+        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
         
-        Glwmn = Keldyshsetup_Floquetn_ext.Glesser_Floquet_T4(war0[ij], Omega, Nf, zeta, delta, T, Gamma, Vip, grwmn, conj(transpose(grwmn)), glwmn);
+        Glwmn = Keldyshsetup_Floquetn_ext.Glesser_Floquet_T4(war0[ij], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn, conj(transpose(grwmn)), glwmn);
         Itemp0 = -Vvi*Glwmn; #Has extra tau_z Nambu Pauli matrix needed in current calculation
         ##--m2--
         Threads.@threads for jk = 1:2*Nf+1
             for kl = 1:2*Nf+1          #VLR*G<RL                                               #VRL*G<LR
-                Iiwf[jk,kl,ij] = (Itemp0[2*jk-1,2*kl-1]+Itemp0[2*jk,2*kl]) - (Itemp0[2*(2*Nf+1)+2*jk-1,2*(2*Nf+1)+2*kl-1]+Itemp0[2*(2*Nf+1)+2*jk,2*(2*Nf+1)+2*kl]); #Trace in Nambu space for each Floquet mode (jk)
+                Iiwf[jk,kl,ij] = (Itemp0[4*jk-3,4*kl-3]+Itemp0[4*jk-2,4*kl-2]+Itemp0[4*jk-1,4*kl-1]+Itemp0[4*jk,4*kl]) - (Itemp0[4*(2*Nf+1)+4*jk-3,4*(2*Nf+1)+4*kl-3]+Itemp0[4*(2*Nf+1)+4*jk-2,4*(2*Nf+1)+4*kl-2]+Itemp0[4*(2*Nf+1)+4*jk-1,4*(2*Nf+1)+4*kl-1]+Itemp0[4*(2*Nf+1)+4*jk,4*(2*Nf+1)+4*kl]); #Trace in Nambu space for each Floquet mode (jk)
             end
         end
     end
@@ -1459,26 +1459,26 @@ function current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterpri
 end
 
 """
-    current_Floquet_T6(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint) -> Matrix{ComplexF64}
+    current_Floquet_T6(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint) -> Matrix{ComplexF64}
 
 Floquet-mode-resolved current truncated at O(𝒯⁶) (uses [`Glesser_Floquet_T6`](@ref)).
 """
-function current_Floquet_T6(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint)
+function current_Floquet_T6(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint)
     Nw0 = length(war0); deltaw0 = abs(war0[2]-war0[1]);
 
     Vvi = Keldyshsetup_Floquetn_ext.Viwmnf(Vip, Nf, T); #Has extra tau_z Nambu Pauli matrix needed in current calculation
     
     Iiwf = zeros(ComplexF64, 2*Nf+1,2*Nf+1,Nw0);
     Threads.@threads for ij = 1:Nw0
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma);
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma);
+        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
+        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
         
-        Glwmn = Keldyshsetup_Floquetn_ext.Glesser_Floquet_T6(war0[ij], Omega, Nf, zeta, delta, T, Gamma, Vip, grwmn, conj(transpose(grwmn)), glwmn);
+        Glwmn = Keldyshsetup_Floquetn_ext.Glesser_Floquet_T6(war0[ij], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn, conj(transpose(grwmn)), glwmn);
         Itemp0 = -Vvi*Glwmn; #Has extra tau_z Nambu Pauli matrix needed in current calculation
         ##--m2--
         Threads.@threads for jk = 1:2*Nf+1
             for kl = 1:2*Nf+1          #VLR*G<RL                                               #VRL*G<LR
-                Iiwf[jk,kl,ij] = (Itemp0[2*jk-1,2*kl-1]+Itemp0[2*jk,2*kl]) - (Itemp0[2*(2*Nf+1)+2*jk-1,2*(2*Nf+1)+2*kl-1]+Itemp0[2*(2*Nf+1)+2*jk,2*(2*Nf+1)+2*kl]); #Trace in Nambu space for each Floquet mode (jk)
+                Iiwf[jk,kl,ij] = (Itemp0[4*jk-3,4*kl-3]+Itemp0[4*jk-2,4*kl-2]+Itemp0[4*jk-1,4*kl-1]+Itemp0[4*jk,4*kl]) - (Itemp0[4*(2*Nf+1)+4*jk-3,4*(2*Nf+1)+4*kl-3]+Itemp0[4*(2*Nf+1)+4*jk-2,4*(2*Nf+1)+4*kl-2]+Itemp0[4*(2*Nf+1)+4*jk-1,4*(2*Nf+1)+4*kl-1]+Itemp0[4*(2*Nf+1)+4*jk,4*(2*Nf+1)+4*kl]); #Trace in Nambu space for each Floquet mode (jk)
             end
         end
     end
@@ -1494,26 +1494,26 @@ function current_Floquet_T6(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterpri
 end
 
 """
-    current_Floquet_T8(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint) -> Matrix{ComplexF64}
+    current_Floquet_T8(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint) -> Matrix{ComplexF64}
 
 Floquet-mode-resolved current truncated at O(𝒯⁸) (uses [`Glesser_Floquet_T8`](@ref)).
 """
-function current_Floquet_T8(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint)
+function current_Floquet_T8(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint)
     Nw0 = length(war0); deltaw0 = abs(war0[2]-war0[1]);
 
     Vvi = Keldyshsetup_Floquetn_ext.Viwmnf(Vip, Nf, T); #Has extra tau_z Nambu Pauli matrix needed in current calculation
     
     Iiwf = zeros(ComplexF64, 2*Nf+1,2*Nf+1,Nw0);
     Threads.@threads for ij = 1:Nw0
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma);
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma);
+        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
+        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
         
-        Glwmn = Keldyshsetup_Floquetn_ext.Glesser_Floquet_T8(war0[ij], Omega, Nf, zeta, delta, T, Gamma, Vip, grwmn, conj(transpose(grwmn)), glwmn);
+        Glwmn = Keldyshsetup_Floquetn_ext.Glesser_Floquet_T8(war0[ij], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn, conj(transpose(grwmn)), glwmn);
         Itemp0 = -Vvi*Glwmn; #Has extra tau_z Nambu Pauli matrix needed in current calculation
         ##--m2--
         Threads.@threads for jk = 1:2*Nf+1
             for kl = 1:2*Nf+1          #VLR*G<RL                                               #VRL*G<LR
-                Iiwf[jk,kl,ij] = (Itemp0[2*jk-1,2*kl-1]+Itemp0[2*jk,2*kl]) - (Itemp0[2*(2*Nf+1)+2*jk-1,2*(2*Nf+1)+2*kl-1]+Itemp0[2*(2*Nf+1)+2*jk,2*(2*Nf+1)+2*kl]); #Trace in Nambu space for each Floquet mode (jk)
+                Iiwf[jk,kl,ij] = (Itemp0[4*jk-3,4*kl-3]+Itemp0[4*jk-2,4*kl-2]+Itemp0[4*jk-1,4*kl-1]+Itemp0[4*jk,4*kl]) - (Itemp0[4*(2*Nf+1)+4*jk-3,4*(2*Nf+1)+4*kl-3]+Itemp0[4*(2*Nf+1)+4*jk-2,4*(2*Nf+1)+4*kl-2]+Itemp0[4*(2*Nf+1)+4*jk-1,4*(2*Nf+1)+4*kl-1]+Itemp0[4*(2*Nf+1)+4*jk,4*(2*Nf+1)+4*kl]); #Trace in Nambu space for each Floquet mode (jk)
             end
         end
     end
@@ -1630,13 +1630,13 @@ function IbiasResidual_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_
 end
 
 """
-    IbiasResidual_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint) -> Vector{Float64}
+    IbiasResidual_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint) -> Vector{Float64}
 
 Current-bias residual `F(x)` with the current rows evaluated at O(𝒯²) (via
 [`current_Floquet_T2`](@ref)); the unitarity and gauge rows are identical to
 [`IbiasResidual_Tfull`](@ref). Used by [`phisolve`](@ref) for `ws=2`.
 """
-function IbiasResidual_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint)
+function IbiasResidual_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint)
     Vip = zeros(ComplexF64, 4*Nf+1);
     for jk = 1:2*Nf
         Vip[2*jk] = Vipi[jk] + im*Vipi[(2*Nf)+jk]; #Vipi only has odd harmonics of eV
@@ -1660,7 +1660,7 @@ function IbiasResidual_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprin
     eqns[2*Nf] = sum( imag.(Vip) );
     
     #--Current--
-    Iif = Keldyshsetup_Floquetn_ext.current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint);
+    Iif = Keldyshsetup_Floquetn_ext.current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint);
     Ifa = zeros(ComplexF64, 4*Nf+1);
     for kl = -Nf:Nf
         for lm = -Nf:Nf
@@ -1679,12 +1679,12 @@ function IbiasResidual_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprin
 end
 
 """
-    IbiasResidual_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint) -> Vector{Float64}
+    IbiasResidual_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint) -> Vector{Float64}
 
 Current-bias residual with current rows at O(𝒯⁴) ([`current_Floquet_T4`](@ref));
 constraint rows as in [`IbiasResidual_Tfull`](@ref). Used by [`phisolve`](@ref) for `ws=4`.
 """
-function IbiasResidual_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint)
+function IbiasResidual_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint)
     Vip = zeros(ComplexF64, 4*Nf+1);
     for jk = 1:2*Nf
         Vip[2*jk] = Vipi[jk] + im*Vipi[(2*Nf)+jk]; #Vipi only has odd harmonics of eV
@@ -1708,103 +1708,7 @@ function IbiasResidual_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprin
     eqns[2*Nf] = sum( imag.(Vip) );
     
     #--Current--
-    Iif = Keldyshsetup_Floquetn_ext.current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint);
-    Ifa = zeros(ComplexF64, 4*Nf+1);
-    for kl = -Nf:Nf
-        for lm = -Nf:Nf
-            Ifa[-(kl-lm)+(2*Nf+1)] = Ifa[-(kl-lm)+(2*Nf+1)] + Iif[-kl+Nf+1,-lm+Nf+1];
-        end
-    end
-    Threads.@threads for hi = 1:Nf #odd harmonics are 0 anyway (gets better as no. of Floquet modes increases). So manually set the non-zero even harmonics to 0.
-        eqns[(2*Nf)+hi] = real(Ifa[-2*hi+(2*Nf+1)]);
-        eqns[(2*Nf+Nf)+hi] = imag(Ifa[-2*hi+(2*Nf+1)]);
-    end
-
-    println("iterprint = ",iterprint)
-    println("eq norm = ",norm(eqns))
-
-    return eqns
-end
-
-"""
-    IbiasResidual_T6(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint) -> Vector{Float64}
-
-Current-bias residual with current rows at O(𝒯⁶) ([`current_Floquet_T6`](@ref)).
-Used by [`phisolve`](@ref) for `ws=6` (solved without an analytic Jacobian).
-"""
-function IbiasResidual_T6(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint)
-    Vip = zeros(ComplexF64, 4*Nf+1);
-    for jk = 1:2*Nf
-        Vip[2*jk] = Vipi[jk] + im*Vipi[(2*Nf)+jk]; #Vipi only has odd harmonics of eV
-    end
-       
-    eqns = zeros(ComplexF64, 4*Nf);
-
-    #--exp(-iphi/2)*exp(+iphi/2)=1--
-    Threads.@threads for hi = 1:Nf-1
-        for ij = 1:(4*Nf+1-2*hi) #Assume higher harmonics are 0
-            eqns[hi] = eqns[hi] + ( real(Vip[ij+2*hi])*real(Vip[ij]) + imag(Vip[ij+2*hi])*imag(Vip[ij]) );
-            eqns[Nf-1+hi] = eqns[Nf-1+hi] + ( -real(Vip[ij+2*hi])*imag(Vip[ij]) + imag(Vip[ij+2*hi])*real(Vip[ij]) );
-        end
-    end
-    for ij = 1:4*Nf+1
-        eqns[2*Nf-1] = eqns[2*Nf-1] + ( real(Vip[ij])*real(Vip[ij]) + imag(Vip[ij])*imag(Vip[ij]) );
-    end
-    eqns[2*Nf-1] = eqns[2*Nf-1] - 1;
-
-    #--phi(t=0)=0--
-    eqns[2*Nf] = sum( imag.(Vip) );
-    
-    #--Current--
-    Iif = Keldyshsetup_Floquetn_ext.current_Floquet_T6(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint);
-    Ifa = zeros(ComplexF64, 4*Nf+1);
-    for kl = -Nf:Nf
-        for lm = -Nf:Nf
-            Ifa[-(kl-lm)+(2*Nf+1)] = Ifa[-(kl-lm)+(2*Nf+1)] + Iif[-kl+Nf+1,-lm+Nf+1];
-        end
-    end
-    Threads.@threads for hi = 1:Nf #odd harmonics are 0 anyway (gets better as no. of Floquet modes increases). So manually set the non-zero even harmonics to 0.
-        eqns[(2*Nf)+hi] = real(Ifa[-2*hi+(2*Nf+1)]);
-        eqns[(2*Nf+Nf)+hi] = imag(Ifa[-2*hi+(2*Nf+1)]);
-    end
-
-    println("iterprint = ",iterprint)
-    println("eq norm = ",norm(eqns))
-
-    return eqns
-end
-
-"""
-    IbiasResidual_T8(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint) -> Vector{Float64}
-
-Current-bias residual with current rows at O(𝒯⁸) ([`current_Floquet_T8`](@ref)).
-Used by [`phisolve`](@ref) for `ws=8` (solved without an analytic Jacobian).
-"""
-function IbiasResidual_T8(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint)
-    Vip = zeros(ComplexF64, 4*Nf+1);
-    for jk = 1:2*Nf
-        Vip[2*jk] = Vipi[jk] + im*Vipi[(2*Nf)+jk]; #Vipi only has odd harmonics of eV
-    end
-       
-    eqns = zeros(ComplexF64, 4*Nf);
-
-    #--exp(-iphi/2)*exp(+iphi/2)=1--
-    Threads.@threads for hi = 1:Nf-1
-        for ij = 1:(4*Nf+1-2*hi) #Assume higher harmonics are 0
-            eqns[hi] = eqns[hi] + ( real(Vip[ij+2*hi])*real(Vip[ij]) + imag(Vip[ij+2*hi])*imag(Vip[ij]) );
-            eqns[Nf-1+hi] = eqns[Nf-1+hi] + ( -real(Vip[ij+2*hi])*imag(Vip[ij]) + imag(Vip[ij+2*hi])*real(Vip[ij]) );
-        end
-    end
-    for ij = 1:4*Nf+1
-        eqns[2*Nf-1] = eqns[2*Nf-1] + ( real(Vip[ij])*real(Vip[ij]) + imag(Vip[ij])*imag(Vip[ij]) );
-    end
-    eqns[2*Nf-1] = eqns[2*Nf-1] - 1;
-
-    #--phi(t=0)=0--
-    eqns[2*Nf] = sum( imag.(Vip) );
-    
-    #--Current--
-    Iif = Keldyshsetup_Floquetn_ext.current_Floquet_T8(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint);
+    Iif = Keldyshsetup_Floquetn_ext.current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint);
     Ifa = zeros(ComplexF64, 4*Nf+1);
     for kl = -Nf:Nf
         for lm = -Nf:Nf
@@ -1960,13 +1864,13 @@ function IbiasJacobian_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_
 end
 
 """
-    IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint) -> Matrix{Float64}
+    IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint) -> Matrix{Float64}
 
 Analytic Jacobian of [`IbiasResidual_T2`](@ref): same construction as
 [`IbiasJacobian_Tfull`](@ref) but with the current-row derivatives built from the
 bare propagators / O(𝒯²)-truncated `G<`. Used by [`phisolve`](@ref) for `ws=2`.
 """
-function IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint)
+function IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint)
     # --- Unpack the real unknown vector into complex phase Fourier coefficients ---
     # Vipi = [ Re(W_1)…Re(W_2Nf) ; Im(W_1)…Im(W_2Nf) ], the 2Nf odd harmonics of exp(-iφ/2).
     # Stored in the even slots of Vip (odd harmonics of eV); even harmonics stay zero.
@@ -2036,7 +1940,7 @@ function IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprin
     #   off-diagonal (hence very sparse — exploited below).
     deltaV = 1; dV = deltaV .* I(4*Nf); #2Nf real + 2Nf odd
     Vipn = zeros(ComplexF64, 4*Nf+1); #4*Nf+1 needed for Vwmnf, Viwmnf. Actually use only 4*Nf variables
-    Miar = zeros(ComplexF64, 2*2*(2*Nf+1),2*2*(2*Nf+1),4*Nf); Mar = zeros(ComplexF64, 2*2*(2*Nf+1),2*2*(2*Nf+1),4*Nf); # Mar[:,:,ij]=∂V/∂x_ij, Miar[:,:,ij]=∂Vᵢ/∂x_ij
+    Miar = zeros(ComplexF64, 2*4*(2*Nf+1),2*4*(2*Nf+1),4*Nf); Mar = zeros(ComplexF64, 2*4*(2*Nf+1),2*4*(2*Nf+1),4*Nf); # Mar[:,:,ij]=∂V/∂x_ij, Miar[:,:,ij]=∂Vᵢ/∂x_ij
     for ij = 1:2*(2*Nf) #variable (for derivative in Jacobian) index
         Vipin = Vipi + dV[:,ij]; # perturb the ij-th real unknown
         for jk = 1:2*Nf
@@ -2048,10 +1952,10 @@ function IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprin
     Mar = Mar .* (abs.(Mar) .> 0.5*T*deltaV); Miar = -Miar .* (abs.(Miar) .> 0.5*T*deltaV); # drop numerical-zero entries; fold the leading minus of ∂(-VᵢG<)/∂x into Miar
     
     Marsp = [sparse(@view Mar[:,:,ij]) for ij = 1:4*Nf]; Miarsp = [sparse(@view Miar[:,:,ij]) for ij = 1:4*Nf]; #dV/dx is a single (sparse) Floquet off-diagonal
-    Glwmn_w2 = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigrwmn = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vviglwmn = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
+    Glwmn_w2 = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigrwmn = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vviglwmn = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
     tls = TaskLocalValue{Vector{Matrix{ComplexF64}}}( () ->
                      begin
-                         t1, t2, t3 = (zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)) for _ in 1:3)
+                         t1, t2, t3 = (zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)) for _ in 1:3)
                          [t1, t2, t3]
                      end)
     for gh = 1:Nw0
@@ -2061,10 +1965,10 @@ function IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprin
         end
         
         # Bare lead propagators at this frequency (the O(𝒯²) scheme expands G< in powers of T):
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma)            # bare retarded gr
+        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)            # bare retarded gr
         gawmn = conj(transpose( grwmn ));                                                        # bare advanced ga = (gr)†
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma)            # bare lesser g<
-        Glwmn_w2 .= Keldyshsetup_Floquetn_ext.Glesser_Floquet_T2(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip, grwmn, gawmn, glwmn); # O(𝒯²) lesser GF
+        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)            # bare lesser g<
+        Glwmn_w2 .= Keldyshsetup_Floquetn_ext.Glesser_Floquet_T2(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn, gawmn, glwmn); # O(𝒯²) lesser GF
         mul!(Vvigrwmn, -Vvi, grwmn); mul!(Vviglwmn, -Vvi, glwmn);                                 # vertex prefactors -Vᵢ·gr and -Vᵢ·g<
 
         # ∂(current)/∂x_ij at O(𝒯²): ∂G<₍₂₎ = gr·M_ij·g< + g<·M_ij·ga (bare propagators), so
@@ -2081,7 +1985,7 @@ function IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprin
             # and accumulate the frequency integral on the fly (sum over gh).
             for jk = 1:(2*Nf+1)
                 for kl = 1:(2*Nf+1)          # LL Nambu trace (rows/cols 1..2(2Nf+1))     minus RR block (offset 2(2Nf+1))
-                    @views jacIif[jk,kl,ij] += (t3[2*jk-1,2*kl-1]+t3[2*jk,2*kl]) - (t3[2*(2*Nf+1)+2*jk-1,2*(2*Nf+1)+2*kl-1]+t3[2*(2*Nf+1)+2*jk,2*(2*Nf+1)+2*kl]); #Trace in Nambu space for each Floquet mode (jk)
+                    @views jacIif[jk,kl,ij] += (t3[4*jk-3,4*kl-3]+t3[4*jk-2,4*kl-2]+t3[4*jk-1,4*kl-1]+t3[4*jk,4*kl]) - (t3[4*(2*Nf+1)+4*jk-3,4*(2*Nf+1)+4*kl-3]+t3[4*(2*Nf+1)+4*jk-2,4*(2*Nf+1)+4*kl-2]+t3[4*(2*Nf+1)+4*jk-1,4*(2*Nf+1)+4*kl-1]+t3[4*(2*Nf+1)+4*jk,4*(2*Nf+1)+4*kl]); #Trace in Nambu space for each Floquet mode (jk)
                 end
             end
         end
@@ -2111,12 +2015,12 @@ function IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprin
 end
 
 """
-    IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint) -> Matrix{Float64}
+    IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint) -> Matrix{Float64}
 
 Analytic Jacobian of [`IbiasResidual_T4`](@ref) (current-row derivatives at O(𝒯⁴)).
 Used by [`phisolve`](@ref) for `ws=4`.
 """
-function IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint)
+function IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint)
     # --- Unpack the real unknown vector into complex phase Fourier coefficients ---
     # Vipi = [ Re(W_1)…Re(W_2Nf) ; Im(W_1)…Im(W_2Nf) ], the 2Nf odd harmonics of exp(-iφ/2).
     # Stored in the even slots of Vip (odd harmonics of eV); even harmonics stay zero.
@@ -2188,7 +2092,7 @@ function IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprin
     #   off-diagonal (hence very sparse — exploited below).
     deltaV = 1; dV = deltaV .* I(4*Nf); #2Nf real + 2Nf odd
     Vipn = zeros(ComplexF64, 4*Nf+1); #4*Nf+1 needed for Vwmnf, Viwmnf. Actually use only 4*Nf variables
-    Miar = zeros(ComplexF64, 2*2*(2*Nf+1),2*2*(2*Nf+1),4*Nf); Mar = zeros(ComplexF64, 2*2*(2*Nf+1),2*2*(2*Nf+1),4*Nf); # Mar[:,:,ij]=∂V/∂x_ij, Miar[:,:,ij]=∂Vᵢ/∂x_ij
+    Miar = zeros(ComplexF64, 2*4*(2*Nf+1),2*4*(2*Nf+1),4*Nf); Mar = zeros(ComplexF64, 2*4*(2*Nf+1),2*4*(2*Nf+1),4*Nf); # Mar[:,:,ij]=∂V/∂x_ij, Miar[:,:,ij]=∂Vᵢ/∂x_ij
     for ij = 1:2*(2*Nf) #variable (for derivative in Jacobian) index
         Vipin = Vipi + dV[:,ij]; # perturb the ij-th real unknown
         for jk = 1:2*Nf
@@ -2203,12 +2107,12 @@ function IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprin
     # hopping self-energy Vv (=Σ), and r/l/a denote gr/g</ga, so e.g. gr_s_gl = gr·Σ·g< and
     # Vvigr_s_gr = -Vᵢ·gr·Σ·gr. These chains are the building blocks of the O(𝒯⁴) lesser-GF
     # expansion and its derivative; they are formed once per frequency below.
-    Glwmn_w4 = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    Vvigr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    Vvigr_s_gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
+    Glwmn_w4 = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
+    Vvigr = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigl = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigr_s_gr = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigr_s_gl = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigl_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
+    Vvigr_s_gr_s_gr = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigr_s_gr_s_gl = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigr_s_gl_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigl_s_ga_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
+    gr_s_gr_s_gl = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); gr_s_gr_s_gr = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); gr_s_gr = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); gr_s_gl = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
+    gr_s_gl_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); gl_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
+    ga_s_ga_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); gl_s_ga_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); ga_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
     
 
     for gh = 1:Nw0
@@ -2218,10 +2122,10 @@ function IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprin
         end
         
         # Bare propagators at this frequency:
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma)            # bare retarded gr
+        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)            # bare retarded gr
         gawmn = conj(transpose( grwmn ));                                                        # bare advanced ga
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma)            # bare lesser g<
-        Glwmn_w4 .= Keldyshsetup_Floquetn_ext.Glesser_Floquet_T4(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip, grwmn, gawmn, glwmn); # O(𝒯⁴) lesser GF
+        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)            # bare lesser g<
+        Glwmn_w4 .= Keldyshsetup_Floquetn_ext.Glesser_Floquet_T4(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn, gawmn, glwmn); # O(𝒯⁴) lesser GF
         # Chained products gr·Σ·g<, gr·Σ·gr·Σ·g<, … (suffix = factor sequence) entering G<₍₄₎:
         gr_s_gr = grwmn*Vv*grwmn; gr_s_gl = grwmn*Vv*glwmn; gr_s_gr_s_gl = gr_s_gr*Vv*glwmn; gr_s_gr_s_gr = gr_s_gr*Vv*grwmn;
         gr_s_gl_s_ga = gr_s_gl*Vv*gawmn; gl_s_ga = glwmn*Vv*gawmn;
@@ -2248,7 +2152,7 @@ function IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprin
             # and accumulate the frequency integral on the fly (sum over gh).
             for jk = 1:(2*Nf+1)
                 for kl = 1:(2*Nf+1)          # LL Nambu trace (rows/cols 1..2(2Nf+1))     minus RR block (offset 2(2Nf+1))
-                    @views jacIif[jk,kl,ij] += (t3[2*jk-1,2*kl-1]+t3[2*jk,2*kl]) - (t3[2*(2*Nf+1)+2*jk-1,2*(2*Nf+1)+2*kl-1]+t3[2*(2*Nf+1)+2*jk,2*(2*Nf+1)+2*kl]); #Trace in Nambu space for each Floquet mode (jk)
+                    @views jacIif[jk,kl,ij] += (t3[4*jk-3,4*kl-3]+t3[4*jk-2,4*kl-2]+t3[4*jk-1,4*kl-1]+t3[4*jk,4*kl]) - (t3[4*(2*Nf+1)+4*jk-3,4*(2*Nf+1)+4*kl-3]+t3[4*(2*Nf+1)+4*jk-2,4*(2*Nf+1)+4*kl-2]+t3[4*(2*Nf+1)+4*jk-1,4*(2*Nf+1)+4*kl-1]+t3[4*(2*Nf+1)+4*jk,4*(2*Nf+1)+4*kl]); #Trace in Nambu space for each Floquet mode (jk)
                 end
             end
         end
@@ -2277,431 +2181,6 @@ function IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprin
     return jaceqns
 end
 
-"""
-    IbiasJacobian_T6(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint) -> Matrix{Float64}
-
-Analytic Jacobian of [`IbiasResidual_T6`](@ref) (O(𝒯⁶)). Provided for completeness;
-[`phisolve`](@ref) currently runs `ws=6` without supplying it.
-"""
-function IbiasJacobian_T6(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint)
-    # --- Unpack the real unknown vector into complex phase Fourier coefficients ---
-    # Vipi = [ Re(W_1)…Re(W_2Nf) ; Im(W_1)…Im(W_2Nf) ], the 2Nf odd harmonics of exp(-iφ/2).
-    # Stored in the even slots of Vip (odd harmonics of eV); even harmonics stay zero.
-    Vip = zeros(ComplexF64, 4*Nf+1);
-    for jk = 1:2*Nf
-        Vip[2*jk] = Vipi[jk] + im*Vipi[(2*Nf)+jk]; #Vipi only has odd harmonics of eV
-    end
-
-    # Jacobian to be filled: jaceqns[i,j] = ∂F_i/∂x_j, where F are the 4Nf residual
-    # equations (constraints + vanishing AC current) and x are the 4Nf real unknowns.
-    jaceqns = zeros(ComplexF64, 4*Nf, 4*Nf);
-    
-    # ===== Rows 1..2Nf: derivatives of the algebraic phase constraints (closed form) =====
-    # Column index ct runs over the unknowns: ct=1..2Nf are ∂/∂Re(W_r), ct=2Nf+1..4Nf are ∂/∂Im(W_r).
-
-    #-- Unitarity exp(-iφ/2)·exp(+iφ/2)=1  ⟹  C_{2h} = Σ_r W_{r+2h} W*_r = 0 (h≠0).
-    #   Row hi = ∂Re(C_{2h})/∂x ; row Nf-1+hi = ∂Im(C_{2h})/∂x , for h = hi = 1..Nf-1.
-    Threads.@threads for hi = 1:Nf-1
-        ct = 0;
-        for ij = 1:(4*Nf+1) #variable (for derivative in Jacobian) index. Real components of V
-            if ij%2 == 0 # only even slots carry the (odd-harmonic) coefficients
-                ct = ct + 1;
-                if ij+2*hi<=4*Nf+1 # convolution partner shifted up by 2h
-                    jaceqns[hi,ct] = jaceqns[hi,ct] + real(Vip[ij+2*hi]);
-                    jaceqns[Nf-1+hi,ct] = jaceqns[Nf-1+hi,ct] + imag(Vip[ij+2*hi]);
-                end
-                if ij-2*hi>=1 # convolution partner shifted down by 2h
-                    jaceqns[hi,ct] = jaceqns[hi,ct] + real(Vip[ij-2*hi]);
-                    jaceqns[Nf-1+hi,ct] = jaceqns[Nf-1+hi,ct] - imag(Vip[ij-2*hi]);
-                end
-            end
-        end
-        for ij = (4*Nf+1)+1:2*(4*Nf+1) #variable (for derivative in Jacobian) index. Imag components of V
-            if (ij-(4*Nf+1))%2 == 0
-                ct = ct + 1;
-                if ij-(4*Nf+1)+2*hi<=4*Nf+1
-                    jaceqns[hi,ct] = jaceqns[hi,ct] + imag(Vip[ij-(4*Nf+1)+2*hi]);
-                    jaceqns[Nf-1+hi,ct] = jaceqns[Nf-1+hi,ct] - real(Vip[ij-(4*Nf+1)+2*hi]);
-                end
-                if ij-(4*Nf+1)-2*hi>=1
-                    jaceqns[hi,ct] = jaceqns[hi,ct] + imag(Vip[ij-(4*Nf+1)-2*hi]);
-                    jaceqns[Nf-1+hi,ct] = jaceqns[Nf-1+hi,ct] + real(Vip[ij-(4*Nf+1)-2*hi]);
-                end
-            end
-        end
-    end
-    #-- Normalization (row 2Nf-1): ∂(Σ_r|W_r|²-1)/∂Re(W_r)=2Re(W_r), /∂Im(W_r)=2Im(W_r). --
-    jaceqns[2*Nf-1,1:(2*Nf)] .+= 2*real(Vip[2:2:(4*Nf)]);
-    jaceqns[2*Nf-1,(2*Nf)+1:2*(2*Nf)] .+= 2*imag(Vip[2:2:(4*Nf)]);
-
-    #-- Gauge (row 2Nf): φ(t=0)=0 ⟹ Σ_m Im(W_m)=0, so ∂/∂Im(W)=1, ∂/∂Re(W)=0 --
-    for ij = (2*Nf)+1:2*(2*Nf) #variable (for derivative in Jacobian) index
-        jaceqns[2*Nf,ij] = 1;
-    end
-
-    # ===== Rows 2Nf+1..4Nf: derivatives of the AC current harmonics I_{2h} =====
-    Vvi = Keldyshsetup_Floquetn_ext.Viwmnf(Vip, Nf, T); # current vertex (τ₃-folded hopping)
-    Vv = Keldyshsetup_Floquetn_ext.Vwmnf(Vip, Nf, T);   # hopping self-energy (enters the higher-order G< expansion)
-
-    Nw0 = length(war0); deltaw0 = abs(war0[2]-war0[1]); # frequency grid over one Floquet zone
-                
-    jacIif = zeros(ComplexF64, 2*Nf+1,2*Nf+1,2*(2*Nf)); #accumulated over frequency on the fly
-    jacIfa = zeros(ComplexF64, 2*(2*Nf),4*Nf+1);
-    
-    #-- Derivatives of the hopping self-energies w.r.t. each unknown. Because V (Vwmnf)
-    #   and the current vertex Vᵢ (Viwmnf) are LINEAR in W, M_ij=∂V/∂x_ij are CONSTANT
-    #   matrices, obtained here by an exact forward difference: perturb unknown ij by
-    #   deltaV=1 and difference the hopping matrix. Each derivative is a single Floquet
-    #   off-diagonal (hence very sparse — exploited below).
-    deltaV = 1; dV = deltaV .* I(4*Nf); #2Nf real + 2Nf odd
-    Vipn = zeros(ComplexF64, 4*Nf+1); #4*Nf+1 needed for Vwmnf, Viwmnf. Actually use only 4*Nf variables
-    Miar = zeros(ComplexF64, 2*2*(2*Nf+1),2*2*(2*Nf+1),4*Nf); Mar = zeros(ComplexF64, 2*2*(2*Nf+1),2*2*(2*Nf+1),4*Nf); # Mar[:,:,ij]=∂V/∂x_ij, Miar[:,:,ij]=∂Vᵢ/∂x_ij
-    for ij = 1:2*(2*Nf) #variable (for derivative in Jacobian) index
-        Vipin = Vipi + dV[:,ij]; # perturb the ij-th real unknown
-        for jk = 1:2*Nf
-            Vipn[2*jk] = Vipin[jk] + im*Vipin[(2*Nf)+jk]; #Vipi only has even harmonics of eV, (-Nf*eV:Nf*eV, Nf is even)
-        end
-        @views Miar[:,:,ij] = ( Keldyshsetup_Floquetn_ext.Viwmnf(Vipn, Nf, T) - Keldyshsetup_Floquetn_ext.Viwmnf(Vip, Nf, T) ) ./ deltaV; # exact (linear) derivative
-        @views Mar[:,:,ij] = ( Keldyshsetup_Floquetn_ext.Vwmnf(Vipn, Nf, T) - Keldyshsetup_Floquetn_ext.Vwmnf(Vip, Nf, T) ) ./ deltaV;
-    end
-    Mar = Mar .* (abs.(Mar) .> 0.5*T*deltaV); Miar = -Miar .* (abs.(Miar) .> 0.5*T*deltaV); # drop numerical-zero entries; fold the leading minus of ∂(-VᵢG<)/∂x into Miar
-
-    # Preallocated chain intermediates for the O(𝒯⁶) derivative. Naming: 's'=Σ=Vv (hopping),
-    # r/l/a = gr/g</ga, so e.g. gr_s_gl = gr·Σ·g< and Vvigr_s_gr = -Vᵢ·gr·Σ·gr. Reused per frequency.
-    Glwmn_w6 = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); 
-    
-    Vvigr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    
-    Vvigr_s_gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    
-    Vvigr_s_gr_s_gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    Vvigr_s_gr_s_gr_s_gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    Vvigr_s_gl_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gr_s_gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gl_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gl_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); ga_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gl_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-
-
-    for gh = 1:Nw0
-        if gh%10 == 0
-            println(" (jac) ev iter = ",iterprint)
-            println(" (jac) w iter/Nw0 = $(gh)/$(Nw0)")
-        end
-        
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma)
-        gawmn = conj(transpose( grwmn ));
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma)
-        Glwmn_w6 .= Keldyshsetup_Floquetn_ext.Glesser_Floquet_T6(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip, grwmn, gawmn, glwmn); #Not calculated repeatedly for each variable        
-
-        Vvigr .= -Vvi*grwmn; Vvigl .= -Vvi*glwmn; Vvigr_s_gr .= -Vvi*gr_s_gr; Vvigr_s_gl .= -Vvi*gr_s_gl; Vvigl_s_ga .= -Vvi*gl_s_ga;
-        
-        gr_s_gr .= grwmn*Vv*grwmn; gr_s_gl .= grwmn*Vv*glwmn; gr_s_gr_s_gl .= gr_s_gr*Vv*glwmn; gr_s_gr_s_gr .= gr_s_gr*Vv*grwmn; 
-        gr_s_gl_s_ga .= gr_s_gl*Vv*gawmn; gl_s_ga .= glwmn*Vv*gawmn;
-        gl_s_ga_s_ga .= gl_s_ga*Vv*gawmn; ga_s_ga .= gawmn*Vv*gawmn;
-        ga_s_ga_s_ga .= ga_s_ga*Vv*gawmn;
-        Vvigr_s_gr_s_gr .= -Vvi*gr_s_gr_s_gr; Vvigr_s_gr_s_gl .= -Vvi*gr_s_gr_s_gl; Vvigr_s_gl_s_ga .= -Vvi*gr_s_gl_s_ga; Vvigl_s_ga_s_ga .= -Vvi*gl_s_ga_s_ga;
-
-        gr_s_gr_s_gr_s_gr_s_gl .= gr_s_gr*Vv*gr_s_gr_s_gl; gr_s_gr_s_gr_s_gl .= grwmn*Vv*gr_s_gr_s_gl;
-        gr_s_gr_s_gr_s_gl_s_ga .= gr_s_gr*Vv*gr_s_gl_s_ga; gr_s_gr_s_gl_s_ga .= grwmn*Vv*gr_s_gl_s_ga;
-        gr_s_gr_s_gl_s_ga_s_ga .= gr_s_gr*Vv*gl_s_ga_s_ga; gr_s_gl_s_ga_s_ga .= grwmn*Vv*gl_s_ga_s_ga;
-        gr_s_gl_s_ga_s_ga_s_ga .= gr_s_gl*Vv*ga_s_ga_s_ga; gl_s_ga_s_ga_s_ga .= glwmn*Vv*ga_s_ga_s_ga;
-        gl_s_ga_s_ga_s_ga_s_ga .= gl_s_ga*Vv*ga_s_ga_s_ga; ga_s_ga_s_ga_s_ga .= gawmn*Vv*ga_s_ga_s_ga;
-        ga_s_ga_s_ga_s_ga_s_ga .= ga_s_ga*Vv*ga_s_ga_s_ga;
-        Vvigr_s_gr_s_gr_s_gr .= Vvigr_s_gr_s_gr*Vv*grwmn; Vvigr_s_gr_s_gr_s_gr_s_gr .= Vvigr_s_gr_s_gr_s_gr*Vv*grwmn; Vvigr_s_gr_s_gr_s_gr_s_gl .= Vvigr_s_gr_s_gr_s_gr*Vv*glwmn;
-        Vvigr_s_gr_s_gr_s_gl .= Vvigr_s_gr_s_gr*Vv*glwmn; Vvigr_s_gr_s_gr_s_gl_s_ga .= Vvigr_s_gr_s_gr_s_gl*Vv*gawmn;
-        Vvigr_s_gr_s_gl_s_ga .= Vvigr_s_gr_s_gl*Vv*gawmn; Vvigr_s_gr_s_gl_s_ga_s_ga .= Vvigr_s_gr_s_gl_s_ga*Vv*gawmn;
-        Vvigr_s_gl_s_ga_s_ga .= Vvigr_s_gl_s_ga*Vv*gawmn; Vvigr_s_gl_s_ga_s_ga_s_ga .= Vvigr_s_gl_s_ga_s_ga*Vv*gawmn;
-        Vvigl_s_ga_s_ga_s_ga .= Vvigl_s_ga_s_ga*Vv*gawmn; Vvigl_s_ga_s_ga_s_ga_s_ga .= Vvigl_s_ga_s_ga_s_ga*Vv*gawmn;
-        
-        
-        # ∂G</∂x_ij by the product rule, grouped by transparency order: t3_1=O(𝒯²), t3_3=O(𝒯⁴),
-        # t3_5=O(𝒯⁶), … In each prebuilt chain, replace one Σ (=Vv) by M_ij=∂V/∂x_ij; the order-grouped
-        # sum is assembled into t3 below (in T8, t3_f additionally carries the vertex derivative ∂Vᵢ/∂x).
-        Threads.@threads for ij = 1:(4*Nf) #variable (for derivative in Jacobian) index
-            t3_1 = Vvigr*Mar[:,:,ij]*glwmn + Vvigl*Mar[:,:,ij]*gawmn; # O(𝒯²): replace the single Σ
-            t3_3 = Vvigr*Mar[:,:,ij]*gr_s_gr_s_gl + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gl + Vvigr_s_gr_s_gr*Mar[:,:,ij]*glwmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gr_s_gl_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gl_s_ga + Vvigr_s_gr_s_gl*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gl_s_ga_s_ga + Vvigr_s_gl*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gl_s_ga*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigl*Mar[:,:,ij]*ga_s_ga_s_ga + Vvigl_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigl_s_ga_s_ga*Mar[:,:,ij]*gawmn; # (-incl in defn of VviGlwmn)
-            t3_5 = Vvigr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gr_s_gl + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gl + Vvigr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gl + Vvigr_s_gr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gl + Vvigr_s_gr_s_gr_s_gr_s_gr*Mar[:,:,ij]*glwmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gl_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gl_s_ga + Vvigr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gl_s_ga + Vvigr_s_gr_s_gr_s_gr*Mar[:,:,ij]*gl_s_ga + Vvigr_s_gr_s_gr_s_gr_s_gl*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gr_s_gr_s_gl_s_ga_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gl_s_ga_s_ga + Vvigr_s_gr_s_gr*Mar[:,:,ij]*gl_s_ga_s_ga + Vvigr_s_gr_s_gr_s_gl*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gr_s_gr_s_gl_s_ga*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gr_s_gl_s_ga_s_ga_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gl_s_ga_s_ga_s_ga + Vvigr_s_gr_s_gl*Mar[:,:,ij]*ga_s_ga_s_ga + Vvigr_s_gr_s_gl_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gr_s_gl_s_ga_s_ga*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gl_s_ga_s_ga_s_ga_s_ga + Vvigr_s_gl*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga + Vvigr_s_gl_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga + Vvigr_s_gl_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gl_s_ga_s_ga_s_ga*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigl*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga_s_ga + Vvigl_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga + Vvigl_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga + Vvigl_s_ga_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigl_s_ga_s_ga_s_ga_s_ga*Mar[:,:,ij]*gawmn; # (-incl in defn of VviGlwmn)
-            t3 = t3_1 + t3_3 + t3_5; # full ∂G<₍₆₎/∂x_ij = sum of the order-grouped parts (𝒯²+𝒯⁴+𝒯⁶)
-
-            # Reduce the N×N derivative matrix t3 = ∂(current operator)/∂x_ij to the
-            # Floquet-mode-resolved current derivative: for each Floquet block (jk,kl) take
-            # the Nambu trace of the left-lead (LL) block minus the right-lead (RR) block,
-            # and accumulate the frequency integral on the fly (sum over gh).
-            for jk = 1:(2*Nf+1)
-                for kl = 1:(2*Nf+1)          # LL Nambu trace (rows/cols 1..2(2Nf+1))     minus RR block (offset 2(2Nf+1))
-                    @views jacIif[jk,kl,ij] += (t3[2*jk-1,2*kl-1]+t3[2*jk,2*kl]) - (t3[2*(2*Nf+1)+2*jk-1,2*(2*Nf+1)+2*kl-1]+t3[2*(2*Nf+1)+2*jk,2*(2*Nf+1)+2*kl]); #Trace in Nambu space for each Floquet mode (jk)
-                end
-            end
-        end
-    end
-
-    jacIif .*= deltaw0 / (2*pi); # complete the (1/2π)∫dω frequency integral
-
-    # Collapse the (m,n) Floquet-mode current derivatives into current-harmonic
-    # derivatives: harmonic s = n-m, so sum the antidiagonals of jacIif. jacIfa[j, s]
-    # = ∂I_s/∂x_j.
-    for kl = -Nf:Nf
-        for lm = -Nf:Nf
-            jacIfa[:,-(kl-lm)+(2*Nf+1)] = jacIfa[:,-(kl-lm)+(2*Nf+1)] + jacIif[-kl+Nf+1,-lm+Nf+1,:];
-        end
-    end
-
-    # Current rows of the Jacobian: the bias condition is I_{2h}=0, so rows 2Nf+hi /
-    # 3Nf+hi are ∂Re(I_{2h})/∂x and ∂Im(I_{2h})/∂x for h=hi=1..Nf (even harmonics 2h).
-    Threads.@threads for hi = 1:Nf
-        jaceqns[(2*Nf)+hi,:] = transpose(real(jacIfa[:,-2*hi+(2*Nf+1)]));
-        jaceqns[(2*Nf+Nf)+hi,:] = transpose(imag(jacIfa[:,-2*hi+(2*Nf+1)]));
-    end
-
-    println(" (jac) iterprint = ",iterprint)
-
-    return jaceqns
-end
-
-"""
-    IbiasJacobian_T8(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint) -> Matrix{Float64}
-
-Analytic Jacobian of [`IbiasResidual_T8`](@ref) (O(𝒯⁸)). Provided for completeness;
-[`phisolve`](@ref) currently runs `ws=8` without supplying it.
-"""
-function IbiasJacobian_T8(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint)
-    # --- Unpack the real unknown vector into complex phase Fourier coefficients ---
-    # Vipi = [ Re(W_1)…Re(W_2Nf) ; Im(W_1)…Im(W_2Nf) ], the 2Nf odd harmonics of exp(-iφ/2).
-    # Stored in the even slots of Vip (odd harmonics of eV); even harmonics stay zero.
-    Vip = zeros(ComplexF64, 4*Nf+1);
-    for jk = 1:2*Nf
-        Vip[2*jk] = Vipi[jk] + im*Vipi[(2*Nf)+jk]; #Vipi only has odd harmonics of eV
-    end
-
-    # Jacobian to be filled: jaceqns[i,j] = ∂F_i/∂x_j, where F are the 4Nf residual
-    # equations (constraints + vanishing AC current) and x are the 4Nf real unknowns.
-    jaceqns = zeros(ComplexF64, 4*Nf, 4*Nf);
-    
-    # ===== Rows 1..2Nf: derivatives of the algebraic phase constraints (closed form) =====
-    # Column index ct runs over the unknowns: ct=1..2Nf are ∂/∂Re(W_r), ct=2Nf+1..4Nf are ∂/∂Im(W_r).
-
-    #-- Unitarity exp(-iφ/2)·exp(+iφ/2)=1  ⟹  C_{2h} = Σ_r W_{r+2h} W*_r = 0 (h≠0).
-    #   Row hi = ∂Re(C_{2h})/∂x ; row Nf-1+hi = ∂Im(C_{2h})/∂x , for h = hi = 1..Nf-1.
-    Threads.@threads for hi = 1:Nf-1
-        ct = 0;
-        for ij = 1:(4*Nf+1) #variable (for derivative in Jacobian) index. Real components of V
-            if ij%2 == 0 # only even slots carry the (odd-harmonic) coefficients
-                ct = ct + 1;
-                if ij+2*hi<=4*Nf+1 # convolution partner shifted up by 2h
-                    jaceqns[hi,ct] = jaceqns[hi,ct] + real(Vip[ij+2*hi]);
-                    jaceqns[Nf-1+hi,ct] = jaceqns[Nf-1+hi,ct] + imag(Vip[ij+2*hi]);
-                end
-                if ij-2*hi>=1 # convolution partner shifted down by 2h
-                    jaceqns[hi,ct] = jaceqns[hi,ct] + real(Vip[ij-2*hi]);
-                    jaceqns[Nf-1+hi,ct] = jaceqns[Nf-1+hi,ct] - imag(Vip[ij-2*hi]);
-                end
-            end
-        end
-        for ij = (4*Nf+1)+1:2*(4*Nf+1) #variable (for derivative in Jacobian) index. Imag components of V
-            if (ij-(4*Nf+1))%2 == 0
-                ct = ct + 1;
-                if ij-(4*Nf+1)+2*hi<=4*Nf+1
-                    jaceqns[hi,ct] = jaceqns[hi,ct] + imag(Vip[ij-(4*Nf+1)+2*hi]);
-                    jaceqns[Nf-1+hi,ct] = jaceqns[Nf-1+hi,ct] - real(Vip[ij-(4*Nf+1)+2*hi]);
-                end
-                if ij-(4*Nf+1)-2*hi>=1
-                    jaceqns[hi,ct] = jaceqns[hi,ct] + imag(Vip[ij-(4*Nf+1)-2*hi]);
-                    jaceqns[Nf-1+hi,ct] = jaceqns[Nf-1+hi,ct] + real(Vip[ij-(4*Nf+1)-2*hi]);
-                end
-            end
-        end
-    end
-    #-- Normalization (row 2Nf-1): ∂(Σ_r|W_r|²-1)/∂Re(W_r)=2Re(W_r), /∂Im(W_r)=2Im(W_r). --
-    jaceqns[2*Nf-1,1:(2*Nf)] .+= 2*real(Vip[2:2:(4*Nf)]);
-    jaceqns[2*Nf-1,(2*Nf)+1:2*(2*Nf)] .+= 2*imag(Vip[2:2:(4*Nf)]);
-
-    #-- Gauge (row 2Nf): φ(t=0)=0 ⟹ Σ_m Im(W_m)=0, so ∂/∂Im(W)=1, ∂/∂Re(W)=0 --
-    for ij = (2*Nf)+1:2*(2*Nf) #variable (for derivative in Jacobian) index
-        jaceqns[2*Nf,ij] = 1;
-    end
-
-    # ===== Rows 2Nf+1..4Nf: derivatives of the AC current harmonics I_{2h} =====
-    Vvi = Keldyshsetup_Floquetn_ext.Viwmnf(Vip, Nf, T); # current vertex (τ₃-folded hopping)
-    Vv = Keldyshsetup_Floquetn_ext.Vwmnf(Vip, Nf, T);   # hopping self-energy (enters the higher-order G< expansion)
-
-    Nw0 = length(war0); deltaw0 = abs(war0[2]-war0[1]); # frequency grid over one Floquet zone
-                
-    jacIif = zeros(ComplexF64, 2*Nf+1,2*Nf+1,2*(2*Nf)); #accumulated over frequency on the fly
-    jacIfa = zeros(ComplexF64, 2*(2*Nf),4*Nf+1);
-    
-    #-- Derivatives of the hopping self-energies w.r.t. each unknown. Because V (Vwmnf)
-    #   and the current vertex Vᵢ (Viwmnf) are LINEAR in W, M_ij=∂V/∂x_ij are CONSTANT
-    #   matrices, obtained here by an exact forward difference: perturb unknown ij by
-    #   deltaV=1 and difference the hopping matrix. Each derivative is a single Floquet
-    #   off-diagonal (hence very sparse — exploited below).
-    deltaV = 1; dV = deltaV .* I(4*Nf); #2Nf real + 2Nf odd
-    Vipn = zeros(ComplexF64, 4*Nf+1); #4*Nf+1 needed for Vwmnf, Viwmnf. Actually use only 4*Nf variables
-    Miar = zeros(ComplexF64, 2*2*(2*Nf+1),2*2*(2*Nf+1),4*Nf); Mar = zeros(ComplexF64, 2*2*(2*Nf+1),2*2*(2*Nf+1),4*Nf); # Mar[:,:,ij]=∂V/∂x_ij, Miar[:,:,ij]=∂Vᵢ/∂x_ij
-    for ij = 1:2*(2*Nf) #variable (for derivative in Jacobian) index
-        Vipin = Vipi + dV[:,ij]; # perturb the ij-th real unknown
-        for jk = 1:2*Nf
-            Vipn[2*jk] = Vipin[jk] + im*Vipin[(2*Nf)+jk]; #Vipi only has even harmonics of eV, (-Nf*eV:Nf*eV, Nf is even)
-        end
-        @views Miar[:,:,ij] = ( Keldyshsetup_Floquetn_ext.Viwmnf(Vipn, Nf, T) - Keldyshsetup_Floquetn_ext.Viwmnf(Vip, Nf, T) ) ./ deltaV; # exact (linear) derivative
-        @views Mar[:,:,ij] = ( Keldyshsetup_Floquetn_ext.Vwmnf(Vipn, Nf, T) - Keldyshsetup_Floquetn_ext.Vwmnf(Vip, Nf, T) ) ./ deltaV;
-    end
-    Mar = Mar .* (abs.(Mar) .> 0.5*T*deltaV); Miar = -Miar .* (abs.(Miar) .> 0.5*T*deltaV); # drop numerical-zero entries; fold the leading minus of ∂(-VᵢG<)/∂x into Miar
-
-    # Preallocated chain intermediates for the O(𝒯⁸) derivative. Naming: 's'=Σ=Vv (hopping),
-    # r/l/a = gr/g</ga, so e.g. gr_s_gl = gr·Σ·g< and Vvigr_s_gr = -Vᵢ·gr·Σ·gr. Reused per frequency.
-    Glwmn_w8 = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); 
-    
-    Vvigr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    
-    Vvigr_s_gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    
-    Vvigr_s_gr_s_gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    Vvigr_s_gr_s_gr_s_gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    Vvigr_s_gl_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gr_s_gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gl_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gl_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); ga_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gl_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-
-    Vvigr_s_gr_s_gr_s_gr_s_gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gr_s_gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gr_s_gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gr_s_gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    Vvigr_s_gr_s_gl_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gl_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl_s_ga_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    Vvigr_s_gr_s_gr_s_gr_s_gr_s_gr_s_gr = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gr_s_gr_s_gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gr_s_gr_s_gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gr_s_gr_s_gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    Vvigr_s_gr_s_gr_s_gl_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gr_s_gl_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigr_s_gl_s_ga_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); Vvigl_s_ga_s_ga_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gr_s_gr_s_gr_s_gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gr_s_gr_s_gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gr_s_gr_s_gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gr_s_gl_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gr_s_gl_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gl_s_ga_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gl_s_ga_s_ga_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); ga_s_ga_s_ga_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gr_s_gr_s_gr_s_gr_s_gl = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gr_s_gr_s_gl_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gr_s_gl_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gr_s_gr_s_gl_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-    gr_s_gl_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); gl_s_ga_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); ga_s_ga_s_ga_s_ga_s_ga_s_ga = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1));
-
-
-    for gh = 1:Nw0
-        if gh%10 == 0
-            println(" (jac) ev iter = ",iterprint)
-            println(" (jac) w iter/Nw0 = $(gh)/$(Nw0)")
-        end
-        
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma)
-        gawmn = conj(transpose( grwmn ));
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma)
-        Glwmn_w8 .= Keldyshsetup_Floquetn_ext.Glesser_Floquet_T8(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip, grwmn, gawmn, glwmn); #Not calculated repeatedly for each variable        
-        
-        Vvigr .= -Vvi*grwmn; Vvigl .= -Vvi*glwmn; Vvigr_s_gr .= -Vvi*gr_s_gr; Vvigr_s_gl .= -Vvi*gr_s_gl; Vvigl_s_ga .= -Vvi*gl_s_ga;
-        
-        gr_s_gr .= grwmn*Vv*grwmn; gr_s_gl .= grwmn*Vv*glwmn; gr_s_gr_s_gl .= gr_s_gr*Vv*glwmn; gr_s_gr_s_gr .= gr_s_gr*Vv*grwmn; 
-        gr_s_gl_s_ga .= gr_s_gl*Vv*gawmn; gl_s_ga .= glwmn*Vv*gawmn;
-        gl_s_ga_s_ga .= gl_s_ga*Vv*gawmn; ga_s_ga .= gawmn*Vv*gawmn;
-        ga_s_ga_s_ga .= ga_s_ga*Vv*gawmn;
-        Vvigr_s_gr_s_gr .= -Vvi*gr_s_gr_s_gr; Vvigr_s_gr_s_gl .= -Vvi*gr_s_gr_s_gl; Vvigr_s_gl_s_ga .= -Vvi*gr_s_gl_s_ga; Vvigl_s_ga_s_ga .= -Vvi*gl_s_ga_s_ga;
-
-        gr_s_gr_s_gr_s_gr_s_gl .= gr_s_gr*Vv*gr_s_gr_s_gl; gr_s_gr_s_gr_s_gl .= grwmn*Vv*gr_s_gr_s_gl;
-        gr_s_gr_s_gr_s_gl_s_ga .= gr_s_gr*Vv*gr_s_gl_s_ga; gr_s_gr_s_gl_s_ga .= grwmn*Vv*gr_s_gl_s_ga;
-        gr_s_gr_s_gl_s_ga_s_ga .= gr_s_gr*Vv*gl_s_ga_s_ga; gr_s_gl_s_ga_s_ga .= grwmn*Vv*gl_s_ga_s_ga;
-        gr_s_gl_s_ga_s_ga_s_ga .= gr_s_gl*Vv*ga_s_ga_s_ga; gl_s_ga_s_ga_s_ga .= glwmn*Vv*ga_s_ga_s_ga;
-        gl_s_ga_s_ga_s_ga_s_ga .= gl_s_ga*Vv*ga_s_ga_s_ga; ga_s_ga_s_ga_s_ga .= gawmn*Vv*ga_s_ga_s_ga;
-        ga_s_ga_s_ga_s_ga_s_ga .= ga_s_ga*Vv*ga_s_ga_s_ga;
-        Vvigr_s_gr_s_gr_s_gr .= Vvigr_s_gr_s_gr*Vv*grwmn; Vvigr_s_gr_s_gr_s_gr_s_gr .= Vvigr_s_gr_s_gr_s_gr*Vv*grwmn; Vvigr_s_gr_s_gr_s_gr_s_gl .= Vvigr_s_gr_s_gr_s_gr*Vv*glwmn;
-        Vvigr_s_gr_s_gr_s_gl .= Vvigr_s_gr_s_gr*Vv*glwmn; Vvigr_s_gr_s_gr_s_gl_s_ga .= Vvigr_s_gr_s_gr_s_gl*Vv*gawmn;
-        Vvigr_s_gr_s_gl_s_ga .= Vvigr_s_gr_s_gl*Vv*gawmn; Vvigr_s_gr_s_gl_s_ga_s_ga .= Vvigr_s_gr_s_gl_s_ga*Vv*gawmn;
-        Vvigr_s_gl_s_ga_s_ga .= Vvigr_s_gl_s_ga*Vv*gawmn; Vvigr_s_gl_s_ga_s_ga_s_ga .= Vvigr_s_gl_s_ga_s_ga*Vv*gawmn;
-        Vvigl_s_ga_s_ga_s_ga .= Vvigl_s_ga_s_ga*Vv*gawmn; Vvigl_s_ga_s_ga_s_ga_s_ga .= Vvigl_s_ga_s_ga_s_ga*Vv*gawmn;
-
-        gr_s_gr_s_gr_s_gr_s_gr_s_gr_s_gl .= gr_s_gr*Vv*gr_s_gr_s_gr_s_gr_s_gl; gr_s_gr_s_gr_s_gr_s_gr_s_gl .= grwmn*Vv*gr_s_gr_s_gr_s_gr_s_gl; 
-        gr_s_gr_s_gr_s_gr_s_gr_s_gl_s_ga .= gr_s_gr*Vv*gr_s_gr_s_gr_s_gl_s_ga; gr_s_gr_s_gr_s_gr_s_gl_s_ga .= grwmn*Vv*gr_s_gr_s_gr_s_gl_s_ga;
-        gr_s_gr_s_gr_s_gr_s_gl_s_ga_s_ga .= gr_s_gr*Vv*gr_s_gr_s_gl_s_ga_s_ga; gr_s_gr_s_gr_s_gl_s_ga_s_ga .= grwmn*Vv*gr_s_gr_s_gl_s_ga_s_ga;
-        gr_s_gr_s_gr_s_gl_s_ga_s_ga_s_ga .= gr_s_gr*Vv*gr_s_gl_s_ga_s_ga_s_ga; gr_s_gr_s_gl_s_ga_s_ga_s_ga .= grwmn*Vv*gr_s_gl_s_ga_s_ga_s_ga;
-        gr_s_gr_s_gl_s_ga_s_ga_s_ga_s_ga .= gr_s_gr*Vv*gl_s_ga_s_ga_s_ga_s_ga; gr_s_gl_s_ga_s_ga_s_ga_s_ga .= grwmn*Vv*gl_s_ga_s_ga_s_ga_s_ga;
-        gr_s_gl_s_ga_s_ga_s_ga_s_ga_s_ga .= gr_s_gl*Vv*ga_s_ga_s_ga_s_ga_s_ga; gl_s_ga_s_ga_s_ga_s_ga_s_ga .= glwmn*Vv*ga_s_ga_s_ga_s_ga_s_ga;
-        gl_s_ga_s_ga_s_ga_s_ga_s_ga_s_ga .= gl_s_ga*Vv*ga_s_ga_s_ga_s_ga_s_ga; ga_s_ga_s_ga_s_ga_s_ga_s_ga .= gawmn*Vv*ga_s_ga_s_ga_s_ga_s_ga;
-        ga_s_ga_s_ga_s_ga_s_ga_s_ga_s_ga .= ga_s_ga*Vv*ga_s_ga_s_ga_s_ga_s_ga; 
-        Vvigr_s_gr_s_gr_s_gr_s_gr_s_gr .= Vvigr_s_gr_s_gr_s_gr_s_gr*Vv*grwmn; Vvigr_s_gr_s_gr_s_gr_s_gr_s_gr_s_gr .= Vvigr_s_gr_s_gr_s_gr_s_gr_s_gr*Vv*grwmn; Vvigr_s_gr_s_gr_s_gr_s_gr_s_gr_s_gl .= Vvigr_s_gr_s_gr_s_gr_s_gr_s_gr*Vv*glwmn;
-        Vvigr_s_gr_s_gr_s_gr_s_gr_s_gl .= Vvigr_s_gr_s_gr_s_gr_s_gr*Vv*glwmn; Vvigr_s_gr_s_gr_s_gr_s_gr_s_gl_s_ga .= Vvigr_s_gr_s_gr_s_gr_s_gr_s_gl*gawmn;
-        Vvigr_s_gr_s_gr_s_gr_s_gl_s_ga .= Vvigr_s_gr_s_gr_s_gr_s_gl*Vv*gawmn; Vvigr_s_gr_s_gr_s_gr_s_gl_s_ga_s_ga .= Vvigr_s_gr_s_gr_s_gr_s_gl_s_ga*gawmn;
-        Vvigr_s_gr_s_gr_s_gl_s_ga_s_ga .= Vvigr_s_gr_s_gr_s_gl_s_ga*Vv*gawmn; Vvigr_s_gr_s_gr_s_gl_s_ga_s_ga_s_ga .= Vvigr_s_gr_s_gr_s_gl_s_ga_s_ga*gawmn;
-        Vvigr_s_gr_s_gl_s_ga_s_ga_s_ga .= Vvigr_s_gr_s_gl_s_ga_s_ga*Vv*gawmn; Vvigr_s_gr_s_gl_s_ga_s_ga_s_ga_s_ga .= Vvigr_s_gr_s_gl_s_ga_s_ga_s_ga*gawmn;
-        Vvigr_s_gl_s_ga_s_ga_s_ga_s_ga .= Vvigr_s_gl_s_ga_s_ga_s_ga*Vv*gawmn; Vvigr_s_gl_s_ga_s_ga_s_ga_s_ga_s_ga .= Vvigr_s_gl_s_ga_s_ga_s_ga_s_ga*gawmn;
-        Vvigl_s_ga_s_ga_s_ga_s_ga_s_ga .= Vvigl_s_ga_s_ga_s_ga_s_ga*Vv*gawmn; Vvigl_s_ga_s_ga_s_ga_s_ga_s_ga_s_ga .= Vvigl_s_ga_s_ga_s_ga_s_ga_s_ga*gawmn;
- 
-        
-        # ∂G</∂x_ij by the product rule, grouped by transparency order: t3_1=O(𝒯²), t3_3=O(𝒯⁴),
-        # t3_5=O(𝒯⁶), … In each prebuilt chain, replace one Σ (=Vv) by M_ij=∂V/∂x_ij; the order-grouped
-        # sum is assembled into t3 below (in T8, t3_f additionally carries the vertex derivative ∂Vᵢ/∂x).
-        Threads.@threads for ij = 1:(4*Nf) #variable (for derivative in Jacobian) index
-            t3_1 = Vvigr*Mar[:,:,ij]*glwmn + Vvigl*Mar[:,:,ij]*gawmn; # O(𝒯²): replace the single Σ
-            t3_3 = Vvigr*Mar[:,:,ij]*gr_s_gr_s_gl + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gl + Vvigr_s_gr_s_gr*Mar[:,:,ij]*glwmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gr_s_gl_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gl_s_ga + Vvigr_s_gr_s_gl*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gl_s_ga_s_ga + Vvigr_s_gl*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gl_s_ga*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigl*Mar[:,:,ij]*ga_s_ga_s_ga + Vvigl_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigl_s_ga_s_ga*Mar[:,:,ij]*gawmn; # (-incl in defn of VviGlwmn)
-            t3_5 = Vvigr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gr_s_gl + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gl + Vvigr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gl + Vvigr_s_gr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gl + Vvigr_s_gr_s_gr_s_gr_s_gr*Mar[:,:,ij]*glwmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gl_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gl_s_ga + Vvigr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gl_s_ga + Vvigr_s_gr_s_gr_s_gr*Mar[:,:,ij]*gl_s_ga + Vvigr_s_gr_s_gr_s_gr_s_gl*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gr_s_gr_s_gl_s_ga_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gl_s_ga_s_ga + Vvigr_s_gr_s_gr*Mar[:,:,ij]*gl_s_ga_s_ga + Vvigr_s_gr_s_gr_s_gl*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gr_s_gr_s_gl_s_ga*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gr_s_gl_s_ga_s_ga_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gl_s_ga_s_ga_s_ga + Vvigr_s_gr_s_gl*Mar[:,:,ij]*ga_s_ga_s_ga + Vvigr_s_gr_s_gl_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gr_s_gl_s_ga_s_ga*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gl_s_ga_s_ga_s_ga_s_ga + Vvigr_s_gl*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga + Vvigr_s_gl_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga + Vvigr_s_gl_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gl_s_ga_s_ga_s_ga*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigl*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga_s_ga + Vvigl_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga + Vvigl_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga + Vvigl_s_ga_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigl_s_ga_s_ga_s_ga_s_ga*Mar[:,:,ij]*gawmn; # (-incl in defn of VviGlwmn)
-            t3_7 = Vvigr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gr_s_gr_s_gr_s_gl + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gr_s_gr_s_gl + Vvigr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gr_s_gl + Vvigr_s_gr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gl + Vvigr_s_gr_s_gr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gl +
-                   Vvigr_s_gr_s_gr_s_gr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gl + Vvigr_s_gr_s_gr_s_gr_s_gr_s_gr_s_gr*Mar[:,:,ij]*glwmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gr_s_gr_s_gl_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gr_s_gl_s_ga + Vvigr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gl_s_ga + Vvigr_s_gr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gl_s_ga + Vvigr_s_gr_s_gr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gl_s_ga +
-                   Vvigr_s_gr_s_gr_s_gr_s_gr_s_gr*Mar[:,:,ij]*gl_s_ga + Vvigr_s_gr_s_gr_s_gr_s_gr_s_gr_s_gl*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gr_s_gl_s_ga_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gl_s_ga_s_ga + Vvigr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gl_s_ga_s_ga + Vvigr_s_gr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gl_s_ga_s_ga + Vvigr_s_gr_s_gr_s_gr_s_gr*Mar[:,:,ij]*gl_s_ga_s_ga +
-                   Vvigr_s_gr_s_gr_s_gr_s_gr_s_gl*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gr_s_gr_s_gr_s_gr_s_gl_s_ga*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gr_s_gr_s_gr_s_gl_s_ga_s_ga_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gr_s_gl_s_ga_s_ga_s_ga + Vvigr_s_gr_s_gr*Mar[:,:,ij]*gr_s_gl_s_ga_s_ga_s_ga + Vvigr_s_gr_s_gr_s_gr*Mar[:,:,ij]*gl_s_ga_s_ga_s_ga + Vvigr_s_gr_s_gr_s_gr_s_gl*Mar[:,:,ij]*ga_s_ga_s_ga +
-                   Vvigr_s_gr_s_gr_s_gr_s_gl_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gr_s_gr_s_gr_s_gl_s_ga_s_ga*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gr_s_gr_s_gl_s_ga_s_ga_s_ga_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gl_s_ga_s_ga_s_ga_s_ga + Vvigr_s_gr_s_gr*Mar[:,:,ij]*gl_s_ga_s_ga_s_ga_s_ga + Vvigr_s_gr_s_gr_s_gl*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga + Vvigr_s_gr_s_gr_s_gl_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga +
-                   Vvigr_s_gr_s_gr_s_gl_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gr_s_gr_s_gl_s_ga_s_ga_s_ga*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gr_s_gl_s_ga_s_ga_s_ga_s_ga_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gl_s_ga_s_ga_s_ga_s_ga_s_ga + Vvigr_s_gr_s_gl*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga_s_ga + Vvigr_s_gr_s_gl_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga + Vvigr_s_gr_s_gl_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga +
-                   Vvigr_s_gr_s_gl_s_ga_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gr_s_gl_s_ga_s_ga_s_ga_s_ga*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigr*Mar[:,:,ij]*gl_s_ga_s_ga_s_ga_s_ga_s_ga_s_ga + Vvigr_s_gl*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga_s_ga_s_ga + Vvigr_s_gl_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga_s_ga + Vvigr_s_gl_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga + Vvigr_s_gl_s_ga_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga +
-                   Vvigr_s_gl_s_ga_s_ga_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gl_s_ga_s_ga_s_ga_s_ga_s_ga*Mar[:,:,ij]*gawmn + # (-incl in defn of VviGlwmn)
-                   Vvigl*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga_s_ga_s_ga_s_ga + Vvigl_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga_s_ga_s_ga + Vvigl_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga_s_ga + Vvigl_s_ga_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga_s_ga + Vvigl_s_ga_s_ga_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga_s_ga +
-                   Vvigl_s_ga_s_ga_s_ga_s_ga_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigl_s_ga_s_ga_s_ga_s_ga_s_ga_s_ga*Mar[:,:,ij]*gawmn; # (-incl in defn of VviGlwmn)
-            t3_f = Miar[:,:,ij]*Glwmn_w8; # and subtract other part directly (- incl in defn of Miar). Glwmn_w2 already included in Glwmn_w4
-            t3 = t3_1 + t3_3 + t3_5 + t3_7 + t3_f; # full ∂G<₍₈₎/∂x_ij: order-grouped parts (𝒯²..𝒯⁸) + t3_f (vertex-derivative term)
-
-            # Reduce the N×N derivative matrix t3 = ∂(current operator)/∂x_ij to the
-            # Floquet-mode-resolved current derivative: for each Floquet block (jk,kl) take
-            # the Nambu trace of the left-lead (LL) block minus the right-lead (RR) block,
-            # and accumulate the frequency integral on the fly (sum over gh).
-            for jk = 1:(2*Nf+1)
-                for kl = 1:(2*Nf+1)          # LL Nambu trace (rows/cols 1..2(2Nf+1))     minus RR block (offset 2(2Nf+1))
-                    @views jacIif[jk,kl,ij] += (t3[2*jk-1,2*kl-1]+t3[2*jk,2*kl]) - (t3[2*(2*Nf+1)+2*jk-1,2*(2*Nf+1)+2*kl-1]+t3[2*(2*Nf+1)+2*jk,2*(2*Nf+1)+2*kl]); #Trace in Nambu space for each Floquet mode (jk)
-                end
-            end
-        end
-    end
-
-    jacIif .*= deltaw0 / (2*pi); # complete the (1/2π)∫dω frequency integral
-
-    # Collapse the (m,n) Floquet-mode current derivatives into current-harmonic
-    # derivatives: harmonic s = n-m, so sum the antidiagonals of jacIif. jacIfa[j, s]
-    # = ∂I_s/∂x_j.
-    for kl = -Nf:Nf
-        for lm = -Nf:Nf
-            jacIfa[:,-(kl-lm)+(2*Nf+1)] = jacIfa[:,-(kl-lm)+(2*Nf+1)] + jacIif[-kl+Nf+1,-lm+Nf+1,:];
-        end
-    end
-
-    # Current rows of the Jacobian: the bias condition is I_{2h}=0, so rows 2Nf+hi /
-    # 3Nf+hi are ∂Re(I_{2h})/∂x and ∂Im(I_{2h})/∂x for h=hi=1..Nf (even harmonics 2h).
-    Threads.@threads for hi = 1:Nf
-        jaceqns[(2*Nf)+hi,:] = transpose(real(jacIfa[:,-2*hi+(2*Nf+1)]));
-        jaceqns[(2*Nf+Nf)+hi,:] = transpose(imag(jacIfa[:,-2*hi+(2*Nf+1)]));
-    end
-
-    println(" (jac) iterprint = ",iterprint)
-
-    return jaceqns
-end
 
 """
     Vt(Vipi, Nf, tar0, Omega) -> Vector{Float64}
@@ -2752,7 +2231,6 @@ exact-Dyson scheme `ws=0` is supported; perturbative schemes are not yet ported.
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
 function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Sigl_s, JL, KL, JR, KR, Vipsolseed = nothing, Nevseed = nothing)
-    ws == 0 || error("phisolve (4x4 ext): only ws=0 (exact Dyson) is ported; perturbative schemes (ws=2,4,6,8) are not yet available in the extended module.");
     Nev = length(evar);
 
     If = zeros(ComplexF64, Nev,2*Nf+1,2*Nf+1); Ifa = zeros(ComplexF64, Nev,4*Nf+1); Iv = zeros(Float64, Nev);
@@ -2783,16 +2261,26 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Sigl_s, JL, KL, JR, 
             ftols = 5e-17;
         end
 
-        fvalue = norm(Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(Vipseed, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_s, JL, KL, JR, KR, hi));
+        if ws == 4
+            fvalue = norm(Keldyshsetup_Floquetn_ext.IbiasResidual_T4(Vipseed, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
+        elseif ws == 2
+            fvalue = norm(Keldyshsetup_Floquetn_ext.IbiasResidual_T2(Vipseed, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
+        elseif ws == 0
+            fvalue = norm(Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(Vipseed, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_s, JL, KL, JR, KR, hi));
+        end
 
         if fvalue < ftols
             Vipsol[hi,:] = Vipseed;
             residualarr[hi] = fvalue;
         else
             t0 = time()
-            res = nlsolve(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_s, JL, KL, JR, KR, hi),
-                          x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_s, JL, KL, JR, KR, hi),
-                          Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
+            if ws == 4
+                res = nlsolve(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
+            elseif ws == 2
+                res = nlsolve(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
+            elseif ws == 0
+                res = nlsolve(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_s, JL, KL, JR, KR, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_s, JL, KL, JR, KR, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
+            end
             t1 = time()
             println("time = ",t1-t0)
             Vipsol[hi,:] = res.zero;
@@ -2805,7 +2293,13 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Sigl_s, JL, KL, JR, 
             VipI[2*kl] = Vipsol[hi,kl] + im*Vipsol[hi,(2*Nf)+kl];
         end
 
-        If[hi,:,:] = Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, Sigl_s, JL, KL, JR, KR, hi);
+        if ws == 4
+            If[hi,:,:] = Keldyshsetup_Floquetn_ext.current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi);
+        elseif ws == 2
+            If[hi,:,:] = Keldyshsetup_Floquetn_ext.current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi);
+        elseif ws == 0
+            If[hi,:,:] = Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, Sigl_s, JL, KL, JR, KR, hi);
+        end
 
         for kl = -Nf:Nf
             for lm = -Nf:Nf
