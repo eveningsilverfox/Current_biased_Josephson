@@ -1,4 +1,5 @@
 cff-version: 1.2.0
+message: "If you use this software, please cite both the software (this repository) and the paper in 'preferred-citation' below."
 title: "Current_biased_Josephson"
 authors:
   - family-names: Lahiri
@@ -6,3 +7,19 @@ authors:
 version: 1.0.0
 date-released: 2026-06-17
 license: MIT
+repository-code: "https://github.com/eveningsilverfox/Current_biased_Josephson"
+preferred-citation:
+  type: article
+  title: "Origin of Subharmonic Gap Structure of DC Current-Biased Josephson Junctions"
+  authors:
+    - family-names: Lahiri
+      given-names: Aritra
+    - family-names: Choi
+      given-names: Sang-Jun
+    - family-names: Trauzettel
+      given-names: Björn
+  journal: "Physical Review B"
+  volume: 111
+  start: "L220504"
+  year: 2025
+  doi: "10.1103/zbd5-1cc2"

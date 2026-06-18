@@ -123,6 +123,7 @@ If you use this code, please cite the paper:
 
 ```bibtex
 @article{SubharmonicSGS,
+  author  = {Aritra Lahiri and Sang-Jun Choi and Bj\"orn Trauzettel},
   title   = {Origin of Subharmonic Gap Structure of DC Current-Biased Josephson Junctions},
   journal = {Phys. Rev. B},
   volume  = {111},
