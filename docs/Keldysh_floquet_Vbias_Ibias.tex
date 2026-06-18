@@ -850,6 +850,237 @@ same machinery by setting $\Delta=0$ and reading off the linear (Ohmic)
 response, $R_N = \langle V\rangle / I_{\rm dc}\big|_{\Delta=0}$ (routine
 \texttt{current\_full\_RN}).
 
+\section{Extension to the \texorpdfstring{$4\times4$}{4x4} Nambu\texorpdfstring{$\otimes$}{x}spin basis: classical-spin (YSR) impurities}
+\label{sec:ysr}
+
+All of the preceding development uses a $2\times2$ Nambu space, which is
+sufficient for a clean spin-singlet junction.  To host \emph{classical-spin
+(magnetic) impurities} --- and thereby Yu--Shiba--Rusinov (YSR) bound states and
+the Josephson diode effect --- the spin degree of freedom must be made explicit.
+This section documents the $4\times4$ Nambu$\otimes$spin extension implemented in
+\texttt{Keldyshsetup\_Floquetn\_ext.jl}, following Eqs.~(7)--(8) of
+\href{https://arxiv.org/abs/2602.15213}{arXiv:2602.15213}.  The structure of
+\S\S\ref{sec:gf}--\ref{sec:jacobian} is reused verbatim; we highlight only what
+changes.
+
+\subsection{Basis and the spin-resolved surface Green's function}
+\label{sec:ysr_basis}
+
+The Nambu spinor $\Psi=(c_\uparrow,c^\dagger_\downarrow)^{\mathsf T}$ of
+\S\ref{sec:setup} is replaced by the full Nambu$\otimes$spin spinor
+\begin{equation}
+  \check c \;=\; \big(c_\uparrow,\,c_\downarrow,\,c^\dagger_\uparrow,\,c^\dagger_\downarrow\big)^{\mathsf T}
+  \;=\;\tau\otimes\sigma,
+\end{equation}
+with $\tau$ the particle--hole and $\sigma$ the spin structure (particle block
+$(\uparrow,\downarrow)$, hole block $(\uparrow^\dagger,\downarrow^\dagger)$).  The
+clean BCS surface Green's function \eqref{eq:surface_gf} becomes the $4\times4$
+matrix
+\begin{equation}
+  \check g_0(z) \;=\; \frac{1}{\zeta\sqrt{\Delta^2-z^2}}
+  \begin{pmatrix}
+    -z & 0 & 0 & \Delta\\
+    0 & -z & -\Delta & 0\\
+    0 & -\Delta & -z & 0\\
+    \Delta & 0 & 0 & -z
+  \end{pmatrix},
+  \qquad z=\omega+\ii\Gamma,
+  \label{eq:g0_4x4}
+\end{equation}
+in which the singlet pairing couples $c_\uparrow\!\leftrightarrow\!c^\dagger_\downarrow$
+with $+\Delta$ (\emph{block~A}) and $c_\downarrow\!\leftrightarrow\!c^\dagger_\uparrow$
+with $-\Delta$ (\emph{block~B}).  Equation~\eqref{eq:g0_4x4} is just the two
+time-reversed copies of \eqref{eq:surface_gf} embedded with opposite-sign gaps;
+it is the helper \texttt{gsurf4} evaluated at $\check V_{\rm imp}=0$.
+
+\subsection{Classical-spin impurity and the local Dyson dressing}
+\label{sec:ysr_imp}
+
+A classical impurity spin (exchange $\mathbf J=(J_x,J_y,J_z)$, potential $K$)
+enters as a static, local self-energy [Eq.~(7) of arXiv:2602.15213]
+\begin{equation}
+  \check V_{\rm imp}
+  \;=\; \sum_{k=x,y,z} J_k\,\big(\tau_u\otimes\sigma_k-\tau_d\otimes\sigma_k^{*}\big)
+        \;+\; K\,\big(\tau_z\otimes\sigma_0\big)
+  \;=\;
+  \begin{pmatrix}
+    \mathbf J\!\cdot\!\boldsymbol\sigma & 0\\
+    0 & -(\mathbf J\!\cdot\!\boldsymbol\sigma)^{*}
+  \end{pmatrix}
+  + K
+  \begin{pmatrix}\sigma_0 & 0\\ 0 & -\sigma_0\end{pmatrix},
+  \label{eq:Vimp}
+\end{equation}
+with the particle/hole projectors $\tau_{u}=\half(\tau_0+\tau_z)$,
+$\tau_{d}=\half(\tau_0-\tau_z)$ (helper \texttt{impurity4}).  The longitudinal
+part $J_z$ is diagonal in spin and keeps blocks A and B decoupled (it only shifts
+them oppositely, splitting the YSR levels); the transverse parts $J_x,J_y$ are
+off-diagonal in spin and \emph{couple} A and B.
+
+The impurity is resummed into the surface propagator by a local Dyson (T-matrix)
+dressing,
+\begin{equation}
+  \boxed{\;\check g(z) \;=\; \big(\id_4-\check g_0(z)\,\check V_{\rm imp}\big)^{-1}\check g_0(z)\;}
+  \label{eq:local_dyson}
+\end{equation}
+(the body of \texttt{gsurf4}), whose in-gap poles are the YSR bound states.  Each
+lead is dressed \emph{independently}: the left lead uses $(\mathbf J_L,K_L)$ and
+the right lead $(\mathbf J_R,K_R)$, so the two contacts are in general
+inequivalent (code arguments \texttt{JL,KL,JR,KR}).
+
+\subsection{Floquet / lead layout}
+\label{sec:ysr_floquet}
+
+The Floquet construction of \S\ref{sec:floquet} is unchanged except for the
+larger inner block.  The bare lead propagators are block-diagonal in the Floquet
+index,
+\begin{equation}
+  [\check g^r]_{mn}=\delta_{mn}\,\check g(\omega+m\Om+\ii\Gamma),
+\end{equation}
+with $\check g$ from \eqref{eq:local_dyson}, and the lesser function
+$\check g^<=-(\check g^r-\check g^a)\,\theta\!\big(-(\omega+m\Om)\big)$ as in
+\eqref{eq:bare_lesser} --- now automatically including the equilibrium filling of
+any YSR level.  The working space grows to
+\begin{equation}
+  \underbrace{2}_{L,R}\times\underbrace{4}_{\text{Nambu}\otimes\text{spin}}\times(2N_f+1)
+  \;=\;8(2N_f+1),
+\end{equation}
+versus $4(2N_f+1)$ in the $2\times2$ theory.  Routines: \texttt{grwmnf},
+\texttt{gawmnf}, \texttt{glwmnf} (now taking \texttt{JL,KL,JR,KR}).
+
+\subsection{Hopping and current vertex are spin-conserving}
+\label{sec:ysr_hop}
+
+The inter-lead tunnelling [Eq.~(8) of arXiv:2602.15213] conserves spin,
+$\mathcal T\,(W\,\tau_u-W^{*}\tau_d)\otimes\sigma_0$, so the Floquet hopping
+self-energy \eqref{eq:hop_floquet} is simply the $2\times2$ Nambu matrix tensored
+with the spin identity,
+\begin{equation}
+  \big[\check V\big]^{LR}_{mn}
+  =\mathcal T\begin{pmatrix}\Wm_{\,n-m}&0\\0&-\Wm^{*}_{\,m-n}\end{pmatrix}\!\otimes\sigma_0,
+  \qquad
+  \big[\check V_i\big]^{LR}_{mn}
+  =\mathcal T\begin{pmatrix}\Wm_{\,n-m}&0\\0&+\Wm^{*}_{\,m-n}\end{pmatrix}\!\otimes\sigma_0,
+  \label{eq:hop_4x4}
+\end{equation}
+and likewise for the $RL$ blocks.  In particular $\check V$ and $\check V_i$ carry
+\emph{no} impurity parameters (these live only in the leads), so
+\texttt{Vwmnf}/\texttt{Viwmnf} keep their $2\times2$-era signatures, differing
+only by the \verb|kron(.,sig0)|.  They remain \emph{linear} in $\{\Wm_r\}$, which
+is what preserves the entire Jacobian construction below.
+
+\subsection{Dyson, Keldysh, and the current}
+\label{sec:ysr_current}
+
+The Dyson equation \eqref{eq:dyson}, the lesser self-energy
+\eqref{eq:sigl_bath}--\eqref{eq:sigl_surf} (with $\tau_0\!\to\!\id_4$ and
+$\tauz\!\to\!\tau_z\otimes\sigma_0$), and the Keldysh equation \eqref{eq:keldysh}
+are formally identical, now solved in the $8(2N_f+1)$-dimensional space
+(\texttt{Grwmnf}, \texttt{Siglf}, \texttt{Glesser\_Floquet\_Tfull}).  The current
+\eqref{eq:current_time} is unchanged in form, $\hat I=-\check V_i\check G^<$, but
+the Nambu trace becomes a Nambu$\otimes$spin trace over \emph{four} diagonal
+components, with the right lead at offset $4(2N_f+1)$:
+\begin{equation}
+  I_{mn}(\omega)
+  = \sum_{a=1}^{4}\big[\hat I^{LL}_{mn}\big]_{aa}
+  - \sum_{a=1}^{4}\big[\hat I^{RR}_{mn}\big]_{aa},
+  \label{eq:Imn_4x4}
+\end{equation}
+to be compared with the two-component trace \eqref{eq:Imn_omega}.  Everything
+downstream --- the frequency integral \eqref{eq:Imn}, the harmonic collapse
+\eqref{eq:Is}, the dc current --- is identical (routine
+\texttt{current\_Floquet\_Tfull}, and the perturbative
+\texttt{current\_Floquet\_T2/\_T4}).
+
+\subsection{Self-consistency and Jacobian: what changes and what does not}
+\label{sec:ysr_jac}
+
+The phase $\phi(t)$ is a \emph{scalar} (spin-independent) gauge field, so the
+unknown vector \eqref{eq:unknowns} is \emph{unchanged}: the same $4N_f$ reals.
+Consequently, in the residual $\mathbf F(\mathbf x)$ of \S\ref{sec:explicit},
+\begin{itemize}
+  \item the unitarity rows \eqref{eq:F_reC}--\eqref{eq:F_norm} and the gauge row
+        \eqref{eq:F_gauge} are \emph{identical} (they involve only $\{\Wm_r\}$,
+        not the basis);
+  \item only the ac-current rows \eqref{eq:F_current} change --- through the
+        $4\times4$ current \eqref{eq:Imn_4x4} and the per-lead impurity.
+\end{itemize}
+The analytic Jacobian inherits the same split.  The constraint-row derivatives
+\eqref{eq:jac_reC}--\eqref{eq:jac_gauge} are unchanged.  For the current rows the
+two key facts of \S\ref{sec:jacobian} still hold verbatim: $\check\Sigma^<$ is
+independent of $\mathbf x$, and $\check V,\check V_i$ are linear in $\mathbf x$,
+so
+\begin{equation}
+  \frac{\partial\check G^<}{\partial x_j}=\check G^r M_j\check G^<+\check G^< M_j\check G^a,
+  \qquad
+  \frac{\partial\hat I}{\partial x_j}
+  =(-\check V_i\check G^<)M_j\check G^a+(-\check V_i\check G^r)M_j\check G^<+(-M^{(i)}_j)\check G^<,
+  \label{eq:dG_4x4}
+\end{equation}
+exactly Eqs.~\eqref{eq:dGl} and \eqref{eq:dIhat_m2}.  The \emph{only}
+modifications are dimensional: the constant sparse derivatives $M_j,M^{(i)}_j$ and
+all scratch matrices grow from $4(2N_f+1)$ to $8(2N_f+1)$, and the
+per-Floquet-pair reduction uses the four-component Nambu$\otimes$spin trace
+\eqref{eq:Imn_4x4}.  The perturbative chain derivatives of
+\S\ref{sec:pert_jacobian} carry over identically (wider matrices, four-component
+trace).  Routines: \texttt{IbiasResidual\_Tfull}, \texttt{IbiasJacobian\_Tfull},
+and the truncated \texttt{\_T2/\_T4}; \texttt{phisolve} dispatches
+$\texttt{ws}=0,2,4$ with \texttt{JL,KL,JR,KR} threaded through.
+
+\subsection{Reduction to the \texorpdfstring{$2\times2$}{2x2} theory, and the diode effect}
+\label{sec:ysr_check}
+
+For a non-magnetic contact ($\mathbf J_L=\mathbf J_R=0$, $K_L=K_R=0$) the dressing
+\eqref{eq:local_dyson} is trivial and $\check g_0$ \eqref{eq:g0_4x4} is
+block-diagonal into block A --- which is \emph{precisely} the original $2\times2$
+problem \eqref{eq:surface_gf} --- and its time-reverse block B.  Because the
+hopping \eqref{eq:hop_4x4} is $\propto\sigma_0$, the two blocks never mix, and the
+four-component trace \eqref{eq:Imn_4x4} equals twice the single-block trace.
+Hence every observable computed in the extended module reduces to \emph{exactly
+twice} its $2\times2$ counterpart --- the spin-degeneracy factor.  This is the
+regression used to validate the port: with $\mathbf J=K=0$,
+\texttt{current\_Floquet\_T2/\_T4} and the current rows of
+\texttt{IbiasResidual}/\texttt{IbiasJacobian} reproduce $2\times$ the
+\texttt{Keldyshsetup\_Floquetn.jl} values to machine precision, and the analytic
+Jacobian matches a finite difference of the residual.
+
+The physics that genuinely requires the $4\times4$ machinery is the
+\emph{non-reciprocal} (diode) regime: for non-collinear or unequal leads
+($\mathbf J_L\nparallel\mathbf J_R$) blocks A and B are coupled and the left/right
+symmetry is broken, $I_{LR}\neq-I_{RL}$, so the supercurrent is no longer odd in
+the phase/voltage --- the Josephson diode effect that motivates the extension.
+
+\subsection{Correspondence to the extended code}
+\label{sec:ysr_codemap}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{ll}
+\hline
+\textbf{Equation / object} & \textbf{Routine in \texttt{Keldyshsetup\_Floquetn\_ext.jl}}\\
+\hline
+Clean $4\times4$ surface GF \eqref{eq:g0_4x4} & \texttt{gsurf4} (with $\check V_{\rm imp}=0$)\\
+Impurity self-energy $\check V_{\rm imp}$ \eqref{eq:Vimp} & \texttt{impurity4(J,K)}\\
+Local Dyson dressing \eqref{eq:local_dyson} & \texttt{gsurf4(z,zeta,delta,Vimp)}\\
+Dressed lead GFs $g^{r,a,<}$ & \texttt{grwmnf}, \texttt{gawmnf}, \texttt{glwmnf} (\texttt{...,JL,KL,JR,KR})\\
+Hopping / current vertex \eqref{eq:hop_4x4} & \texttt{Vwmnf}, \texttt{Viwmnf} (\verb|kron(.,sig0)|)\\
+Dyson / lesser SE / Keldysh & \texttt{Grwmnf}, \texttt{Siglf}, \texttt{Glesser\_Floquet\_Tfull}\\
+Current, four-component trace \eqref{eq:Imn_4x4} & \texttt{current\_Floquet\_Tfull}\\
+Transparency expansion ($\mathcal T^2,\mathcal T^4$) & \texttt{Glesser/current\_Floquet/IbiasResidual/IbiasJacobian\_T2,\_T4}\\
+Self-consistency / Jacobian \eqref{eq:dG_4x4} & \texttt{IbiasResidual\_Tfull}, \texttt{IbiasJacobian\_Tfull}\\
+Bias sweep + Newton solve ($\texttt{ws}=0,2,4$) & \texttt{phisolve(...,JL,KL,JR,KR)}\\
+Normal-state resistance $R_N$ & \texttt{RN\_full(...,JL,KL,JR,KR)}\\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{What differs from the $2\times2$ routines.}
+The signatures gain the per-lead impurity arguments \texttt{JL,KL,JR,KR}; matrices
+are sized $8(2N_f+1)$; the Nambu trace sums four diagonal components with
+right-lead offset $4(2N_f+1)$; and \texttt{Vwmnf}/\texttt{Viwmnf} tensor the
+$2\times2$ hopping with $\sigma_0$.  All other differential and algebraic
+structure is identical to \S\S\ref{sec:explicit}--\ref{sec:jacobian}.
+
 \section{Correspondence to the code}
 \label{sec:codemap}
 
