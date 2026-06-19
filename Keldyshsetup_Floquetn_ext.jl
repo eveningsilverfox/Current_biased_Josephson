@@ -417,7 +417,7 @@ function current_Vbias_Floquet_Tfull(war1, ev, zeta, delta, T, Gamma, JL, KL, JR
     war0 = -0.5*Omega .+ range(0, (Nw0-1)*Omega/Nw0, Nw0);
     VipI = zeros(ComplexF64, 4*Nf+1);
     VipI[2*Nf] = 1;
-    If = Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta1, T, Gamma, VipI, 1, 1, JL, KL, JR, KR, 0);
+    If = Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta1, T, Gamma, VipI, 1, JL, KL, JR, KR, 0);
     Idc = real(sum(diag(If)));
     return Idc
 end
@@ -2330,7 +2330,7 @@ function RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR)
     VipI = zeros(ComplexF64, 4*Nf+1);
     VipI[2*Nf] = 1;
 
-    If = Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta1, T, Gamma, VipI, 1, 1, JL, KL, JR, KR, 0);
+    If = Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta1, T, Gamma, VipI, 1, JL, KL, JR, KR, 0);
     Idc = real(sum(diag(If)));
     GN = (Idc-0)/(Omega-0); RN = 1/GN;
     return RN

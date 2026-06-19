@@ -71,7 +71,7 @@ for hi = 1:Nev
     Nw0 = trunc(Int, Omega/dw0);
     war0 = -0.5*Omega .+ range(0, (Nw0-1)*Omega/Nw0, Nw0);
 
-    If[hi,:,:] = Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, Sigl_b, Sigl_s, JL, KL, JR, KR, hi);
+    If[hi,:,:] = Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, Sigl_s, JL, KL, JR, KR, hi);
 
     for kl = -Nf:Nf
         for lm = -Nf:Nf
