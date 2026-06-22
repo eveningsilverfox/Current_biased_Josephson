@@ -62,113 +62,53 @@ end
 
 
 
-
-## ============ Perturbative current symbolic expression ==============
-
-"""
-    currentSym_T2()
-
-Symbolic (Symbolics.jl) derivation of the structure of the O(𝒯²) DC Josephson
-current. Builds the lowest-order current as a Nambu-space trace of the hopping
-self-energies (`Siglr`, `Sigrl`) and symbolic Green's-function blocks `gij`, then
-`simplify`s it, as an analytic aid for reading off which GF / phase-harmonic
-combinations contribute at second order in the transparency. Not used by any
-solver. (Note: returns the bare symbol `I` rather than the assembled `Ia` — a
-pre-existing quirk.)
-"""
-function currentSym_T2()
-    @variables Wa, Wmac, Wb, Wmbc;
-    @variables g11a, g12a, g21a, g22a, g11b, g12b, g21b, g22b;
-
-    Siglra = [Wa 0; 0 -Wmac]; # Sigrl1m = [Wm1 0; 0 -W1c];
-    Siglrb = [Wb 0; 0 -Wmbc];
-    Sigrla = [Wmac 0; 0 -Wa];
-    Sigrlb = [Wmbc 0; 0 -Wb];
-
-    #Pure DC bias has only one element as exp(-iphi(t)/2=-ieVdct) contains only eVdc. This kills pure pair current unless eVdc=0, in which case both elements are present.
-    #The AC voltage for a DC current bias has both, as exp(-iphi(t)/2) contains both +ne<V> and -ne<V>! This generates a pure DC pair current regardless of the voltage!
-
-    Ia = Symbolics.tr( [1 0; 0 -1] * Siglra * [g11a g12a; g21a g22a] * Sigrlb * [g11b g12b; g21b g22b] );
-    simplify(Ia,expand=true)
-
-
-
-    return I
-end
-
-"""
-    currentSym_T4()
-
-Symbolic (Symbolics.jl) derivation of the structure of the O(𝒯⁴) DC current: the
-four-vertex Nambu-space trace of the hopping self-energies and symbolic GF blocks,
-`simplify`-expanded. Analytic aid only (not called by any solver); the order-𝒯⁴
-counterpart of [`currentSym_T2`](@ref). Returns the assembled expression `Ia`.
-"""
-function currentSym_T4()
-    @variables Wa, Wmac, Wb, Wmbc, Wc, Wmcc, Wd, Wmdc;
-    @variables g11a, g12a, g21a, g22a, g11b, g12b, g21b, g22b, g11c, g12c, g21c, g22c, g11d, g12d, g21d, g22d ;
-
-    Siglra = [Wa 0; 0 -Wmac]; # Sigrl1m = [Wm1 0; 0 -W1c];
-    Siglrb = [Wb 0; 0 -Wmbc];
-    Siglrc = [Wc 0; 0 -Wmcc];
-    Siglrd = [Wd 0; 0 -Wmdc];
-    Sigrla = [Wmac 0; 0 -Wa];
-    Sigrlb = [Wmbc 0; 0 -Wb];
-    Sigrlc = [Wmcc 0; 0 -Wc];
-    Sigrld = [Wmdc 0; 0 -Wd];
-    #Pure DC bias has only one element as exp(-iphi(t)/2=-ieVdct) contains only eVdc. This kills pure pair current unless eVdc=0, in which case both elements are present.
-    #The AC voltage for a DC current bias has both, as exp(-iphi(t)/2) contains both +ne<V> and -ne<V>! This generates a pure DC pair current regardless of the voltage!
-
-    Ia = Symbolics.tr( [1 0; 0 -1] * Siglra * [g11a g12a; g21a g22a] * Sigrlb * [g11b g12b; g21b g22b] * Siglrc * [g11c g12c; g21c g22c] * Sigrld * [g11d g12d; g21d g22d] );
-    simplify(Ia,expand=true)
-
-
-    return Ia
-end
-
-
-
 ## ============ Critical current ==============
 
 
 """
-    currentPhi_eq_T2(war1, zeta, delta, T, Gamma, phi) -> Float64
+    currentPhi_eq_T2(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR) -> Float64
 
 Equilibrium (zero-bias) Josephson current at fixed phase difference `phi`, to
-lowest order O(𝒯²) in the transparency. Non-Floquet: the phase is static, so the
-hopping self-energies `Sigrl, Siglr = 𝒯·diag(e^∓iφ/2, -e^±iφ/2)` are time-
-independent and the current is a single frequency integral over `war1` of the
-Keldysh trace `tr[τ3(Σ gʳ Σ g< + Σ g< Σ gᵃ)]` (LR minus RL), using the BCS surface
-GF and the bath+surface lesser self-energy. Building block of the current–phase
-relation `I(φ)`; `maxᵩ I(φ)` is the critical current.
+lowest order O(𝒯²), in the 4x4 Nambu(x)spin basis with per-lead classical-spin
+(YSR) impurities `JL,KL` / `JR,KR`. Non-Floquet: the static hopping self-energies
+`Sigrl, Siglr = 𝒯·diag(e^∓iφ/2, -e^±iφ/2)⊗σ0` are time-independent and the current
+is a single frequency integral over `war1` of the Keldysh trace
+`tr[(τz⊗σ0)(Σ gʳ Σ g< + Σ g< Σ gᵃ)]` (LR minus RL). Each lead carries its own
+impurity-dressed surface GF `g_α = (I − g0 V_imp^α)⁻¹ g0`, assigned by the
+alternation rule (propagator just after Σ_LR → R lead, after Σ_RL → L lead).
+Reduces to 2x the 2x2 clean result when `JL=JR=0, KL=KR=0`. Building block of the
+current–phase relation `I(φ)`; `maxᵩ I(φ)` is the critical current.
 
 # Arguments
 - `war1`: real-frequency grid (units of Δ).
 - `zeta`, `delta`, `T`, `Gamma`: lead hopping ζ, gap Δ, transparency 𝒯, Dynes Γ.
 - `phi`: phase difference φ.
+- `JL,KL,JR,KR`: per-lead exchange `J=(Jx,Jy,Jz)` and potential `K` (`J=K=0`: clean).
 """
-function currentPhi_eq_T2(war1, zeta, delta, T, Gamma, phi)
-    Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]); tau3 = [1 0; 0 -1];
+function currentPhi_eq_T2(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
+    Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]);
+    tz = ComplexF64[1 0 0 0; 0 1 0 0; 0 0 -1 0; 0 0 0 -1];
+    sigx = ComplexF64[0 1; 1 0]; sigy = ComplexF64[0 -im; im 0]; sigz = ComplexF64[1 0; 0 -1]; sig0 = ComplexF64[1 0; 0 1]; tauz = ComplexF64[1 0; 0 -1];
+    JsL = JL[1]*sigx + JL[2]*sigy + JL[3]*sigz; VimpL = [JsL zeros(ComplexF64,2,2); zeros(ComplexF64,2,2) -conj(JsL)] + KL*kron(tauz,sig0);
+    JsR = JR[1]*sigx + JR[2]*sigy + JR[3]*sigz; VimpR = [JsR zeros(ComplexF64,2,2); zeros(ComplexF64,2,2) -conj(JsR)] + KR*kron(tauz,sig0);
 
-    Sigrl = zeros(ComplexF64, 2,2); Sigrl =  T .* [exp(-im*phi/2) 0; 0 -exp(+im*phi/2)];
-    Siglr = zeros(ComplexF64, 2,2); Siglr =  T .* [exp(+im*phi/2) 0; 0 -exp(-im*phi/2)];
+    Sigrl = T .* kron(ComplexF64[exp(-im*phi/2) 0; 0 -exp(+im*phi/2)], sig0);
+    Siglr = T .* kron(ComplexF64[exp(+im*phi/2) 0; 0 -exp(-im*phi/2)], sig0);
 
     Idcw = zeros(Float64,Nw1);
     Threads.@threads for hi = 1:Nw1
-        # fac = exp(-(ww+ij*Omega)^2 / (zeta^2));
-        fac = 1;
-        grwar = fac * 1/( zeta*sqrt(delta^2-(war1[hi]+im*Gamma)^2) ) .* [-(war1[hi]+im*Gamma) delta; delta -(war1[hi]+im*Gamma)];
-        gawar = conj(transpose(grwar));
-
-        # glwar = -2*im*(wwab .< 0) .* imag.(grwar);
-        glwar0 = -2*im*(war1[hi] .< 0) .* imag.(grwar); Sigl = ( im*2*Gamma*I(2) + zeta^2 .* ( tau3 * glwar0 * tau3 ) ) .* (war1[hi] .< 0);
-        glwar = grwar * Sigl * conj(transpose(grwar));
-        
-        Idcwlr = real( tr( tau3 * ( Siglr * grwar * Sigrl * glwar ) ) ) + 
-                 real( tr( tau3 * ( Siglr * glwar * Sigrl * gawar ) ) );
-        Idcwrl = real( tr( tau3 * ( Sigrl * grwar * Siglr * glwar ) ) ) + 
-                 real( tr( tau3 * ( Sigrl * glwar * Siglr * gawar ) ) );
-        
+        wwab = war1[hi]; z = wwab + im*Gamma; ff = (wwab < 0);
+        g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+        grL = (I(4) - g0*VimpL) \ g0; gaL = grL';
+        grR = (I(4) - g0*VimpR) \ g0; gaR = grR';
+        # embedded (occupied-state) lesser GF, per lead
+        gl0L = ff .* ( -(grL - gaL) ); SiglL = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0L*tz) ); glL = grL*SiglL*gaL;
+        gl0R = ff .* ( -(grR - gaR) ); SiglR = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0R*tz) ); glR = grR*SiglR*gaR;
+        # lead just after Sigma_LR -> R, after Sigma_RL -> L
+        Idcwlr = real( tr( tz * ( Siglr * grR * Sigrl * glL ) ) ) +
+                 real( tr( tz * ( Siglr * glR * Sigrl * gaL ) ) );
+        Idcwrl = real( tr( tz * ( Sigrl * grL * Siglr * glR ) ) ) +
+                 real( tr( tz * ( Sigrl * glL * Siglr * gaR ) ) );
         Idcw[hi] = Idcwlr - Idcwrl;
     end
     Idc = (deltaw1/(2*pi)) * sum(Idcw);
@@ -177,220 +117,94 @@ function currentPhi_eq_T2(war1, zeta, delta, T, Gamma, phi)
 end
 
 """
-    currentPhi_eq_T4(war1, zeta, delta, T, Gamma, phi) -> Float64
+    currentPhi_eq_T4(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR) -> Float64
 
-Equilibrium Josephson current at fixed phase `phi`, expanded through O(𝒯⁴): the
-O(𝒯²) term of [`currentPhi_eq_T2`](@ref) plus the four-vertex multiple-tunnelling
-diagrams (chains `Σ gʳ Σ gʳ Σ gʳ Σ g<` etc.). Non-Floquet, equilibrium
-(occupied-state) lesser GFs.
+Equilibrium Josephson current at fixed phase `phi`, expanded through O(𝒯⁴), in the
+4x4 Nambu(x)spin basis with per-lead YSR impurities: the O(𝒯²) term of
+[`currentPhi_eq_T2`](@ref) plus the four-vertex multiple-tunnelling diagrams
+(chains `Σ gʳ Σ gʳ Σ gʳ Σ g<` etc.). Per-lead impurity-dressed surface GFs with the
+alternation rule (LR chains see lead order R,L,R,L; RL chains L,R,L,R), simple FDT
+lesser GF `g< = -(gʳ-gᵃ)θ(-ω)`. Reduces to 2x the 2x2 clean result when `J=K=0`.
 """
-function currentPhi_eq_T4(war1, zeta, delta, T, Gamma, phi)
-    Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]); tau3 = [1 0; 0 -1];
+function currentPhi_eq_T4(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
+    Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]);
+    tz = ComplexF64[1 0 0 0; 0 1 0 0; 0 0 -1 0; 0 0 0 -1];
+    sigx = ComplexF64[0 1; 1 0]; sigy = ComplexF64[0 -im; im 0]; sigz = ComplexF64[1 0; 0 -1]; sig0 = ComplexF64[1 0; 0 1]; tauz = ComplexF64[1 0; 0 -1];
+    JsL = JL[1]*sigx + JL[2]*sigy + JL[3]*sigz; VimpL = [JsL zeros(ComplexF64,2,2); zeros(ComplexF64,2,2) -conj(JsL)] + KL*kron(tauz,sig0);
+    JsR = JR[1]*sigx + JR[2]*sigy + JR[3]*sigz; VimpR = [JsR zeros(ComplexF64,2,2); zeros(ComplexF64,2,2) -conj(JsR)] + KR*kron(tauz,sig0);
 
-    Sigrl = zeros(ComplexF64, 2,2); Sigrl =  T .* [exp(-im*phi/2) 0; 0 -exp(+im*phi/2)];
-    Siglr = zeros(ComplexF64, 2,2); Siglr =  T .* [exp(+im*phi/2) 0; 0 -exp(-im*phi/2)];
+    Sigrl = T .* kron(ComplexF64[exp(-im*phi/2) 0; 0 -exp(+im*phi/2)], sig0);
+    Siglr = T .* kron(ComplexF64[exp(+im*phi/2) 0; 0 -exp(-im*phi/2)], sig0);
 
     Idcw = zeros(Float64,Nw1);
     Threads.@threads for hi = 1:Nw1
-        # fac = exp(-(ww+ij*Omega)^2 / (zeta^2));
-        fac = 1;
+        wwab = war1[hi]; z = wwab + im*Gamma; ff = (wwab < 0);
+        g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+        grL = (I(4) - g0*VimpL) \ g0; gaL = grL'; glL = ff .* ( -(grL - gaL) );
+        grR = (I(4) - g0*VimpR) \ g0; gaR = grR'; glR = ff .* ( -(grR - gaR) );
 
-        wwab = war1[hi];
-        grwar = fac * 1/( zeta*sqrt(delta^2-(wwab+im*Gamma)^2) ) .* [-(wwab+im*Gamma) delta; delta -(wwab+im*Gamma)];
-        glwar = -2*im*(wwab .< 0) .* imag.(grwar);
-        gawar = conj(transpose(grwar));
-        
-        Idcw2lr = real( tr( tau3 * ( Siglr * grwar * Sigrl * glwar ) ) ) + 
-                  real( tr( tau3 * ( Siglr * glwar * Sigrl * gawar ) ) );
-        Idcw2rl = real( tr( tau3 * ( Sigrl * grwar * Siglr * glwar ) ) ) + 
-                  real( tr( tau3 * ( Sigrl * glwar * Siglr * gawar ) ) );
-        
-        Idcw4lr = real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar ) ) ) + 
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar ) ) ) + 
-                  real( tr( tau3 * ( Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) ); 
-        Idcw4rl = real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar ) ) ) + 
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar ) ) ) + 
-                  real( tr( tau3 * ( Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) );
-        Idcw[hi] = Idcw[hi] + Idcw2lr + Idcw4lr - Idcw2rl - Idcw4rl;
+        # O(T^2): propagator just after Sigma_LR -> R, after Sigma_RL -> L
+        Idcw2lr = real( tr( tz * ( Siglr * grR * Sigrl * glL ) ) ) +
+                  real( tr( tz * ( Siglr * glR * Sigrl * gaL ) ) );
+        Idcw2rl = real( tr( tz * ( Sigrl * grL * Siglr * glR ) ) ) +
+                  real( tr( tz * ( Sigrl * glL * Siglr * gaR ) ) );
+        # O(T^4): LR propagator leads [R,L,R,L], RL leads [L,R,L,R]
+        Idcw4lr = real( tr( tz * ( Siglr * grR * Sigrl * grL * Siglr * grR * Sigrl * glL ) ) ) +
+                  real( tr( tz * ( Siglr * grR * Sigrl * grL * Siglr * glR * Sigrl * gaL ) ) ) +
+                  real( tr( tz * ( Siglr * grR * Sigrl * glL * Siglr * gaR * Sigrl * gaL ) ) ) +
+                  real( tr( tz * ( Siglr * glR * Sigrl * gaL * Siglr * gaR * Sigrl * gaL ) ) );
+        Idcw4rl = real( tr( tz * ( Sigrl * grL * Siglr * grR * Sigrl * grL * Siglr * glR ) ) ) +
+                  real( tr( tz * ( Sigrl * grL * Siglr * grR * Sigrl * glL * Siglr * gaR ) ) ) +
+                  real( tr( tz * ( Sigrl * grL * Siglr * glR * Sigrl * gaL * Siglr * gaR ) ) ) +
+                  real( tr( tz * ( Sigrl * glL * Siglr * gaR * Sigrl * gaL * Siglr * gaR ) ) );
+        Idcw[hi] = Idcw2lr + Idcw4lr - Idcw2rl - Idcw4rl;
     end
-    
+
     Idc = (deltaw1/(2*pi)) * sum(Idcw);
 
     return Idc
 end
 
 """
-    currentPhi_eq_T6(war1, zeta, delta, T, Gamma, phi) -> Float64
-
-Equilibrium Josephson current at fixed phase `phi`, expanded through O(𝒯⁶)
-(six-vertex tunnelling diagrams added to [`currentPhi_eq_T4`](@ref)). Non-Floquet.
-"""
-function currentPhi_eq_T6(war1, zeta, delta, T, Gamma, phi)
-    Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]); tau3 = [1 0; 0 -1];
-
-    Sigrl = zeros(ComplexF64, 2,2); Sigrl =  T .* [exp(-im*phi/2) 0; 0 -exp(+im*phi/2)];
-    Siglr = zeros(ComplexF64, 2,2); Siglr =  T .* [exp(+im*phi/2) 0; 0 -exp(-im*phi/2)];
-
-    Idcw = zeros(Float64,Nw1);
-    Threads.@threads for hi = 1:Nw1
-        # fac = exp(-(ww+ij*Omega)^2 / (zeta^2));
-        fac = 1;
-
-        wwab = war1[hi];
-        grwar = fac * 1/( zeta*sqrt(delta^2-(wwab+im*Gamma)^2) ) .* [-(wwab+im*Gamma) delta; delta -(wwab+im*Gamma)];
-        glwar = -2*im*(wwab .< 0) .* imag.(grwar);
-        gawar = conj(transpose(grwar));
-        
-        Idcw2lr = real( tr( tau3 * ( Siglr * grwar * Sigrl * glwar ) ) ) + 
-                  real( tr( tau3 * ( Siglr * glwar * Sigrl * gawar ) ) );
-        Idcw2rl = real( tr( tau3 * ( Sigrl * grwar * Siglr * glwar ) ) ) + 
-                  real( tr( tau3 * ( Sigrl * glwar * Siglr * gawar ) ) );
-        
-        Idcw4lr = real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar ) ) ) + 
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar ) ) ) + 
-                  real( tr( tau3 * ( Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) ); 
-        Idcw4rl = real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar ) ) ) + 
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar ) ) ) + 
-                  real( tr( tau3 * ( Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) );
-        
-        Idcw6lr = real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) );                                    
-        Idcw6rl = real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) );                                    
-
-        Idcw[hi] = Idcw[hi] + Idcw2lr + Idcw4lr + Idcw6lr - Idcw2rl - Idcw4rl - Idcw6rl;
-    end
-    
-    Idc = (deltaw1/(2*pi)) * sum(Idcw);
-
-    return Idc
-end
-
-"""
-    currentPhi_eq_T8(war1, zeta, delta, T, Gamma, phi) -> Float64
-
-Equilibrium Josephson current at fixed phase `phi`, expanded through O(𝒯⁸)
-(eight-vertex tunnelling diagrams added to [`currentPhi_eq_T6`](@ref)). Non-Floquet.
-"""
-function currentPhi_eq_T8(war1, zeta, delta, T, Gamma, phi)
-    Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]); tau3 = [1 0; 0 -1];
-
-    Sigrl = zeros(ComplexF64, 2,2); Sigrl =  T .* [exp(-im*phi/2) 0; 0 -exp(+im*phi/2)];
-    Siglr = zeros(ComplexF64, 2,2); Siglr =  T .* [exp(+im*phi/2) 0; 0 -exp(-im*phi/2)];
-
-    Idcw = zeros(Float64,Nw1);
-    Threads.@threads for hi = 1:Nw1
-        # fac = exp(-(ww+ij*Omega)^2 / (zeta^2));
-        fac = 1;
-
-        wwab = war1[hi];
-        grwar = fac * 1/( zeta*sqrt(delta^2-(wwab+im*Gamma)^2) ) .* [-(wwab+im*Gamma) delta; delta -(wwab+im*Gamma)];
-        glwar = -2*im*(wwab .< 0) .* imag.(grwar);
-        gawar = conj(transpose(grwar));
-        
-        Idcw2lr = real( tr( tau3 * ( Siglr * grwar * Sigrl * glwar ) ) ) + 
-                  real( tr( tau3 * ( Siglr * glwar * Sigrl * gawar ) ) );
-        Idcw2rl = real( tr( tau3 * ( Sigrl * grwar * Siglr * glwar ) ) ) + 
-                  real( tr( tau3 * ( Sigrl * glwar * Siglr * gawar ) ) );
-        
-        Idcw4lr = real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar ) ) ) + 
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar ) ) ) + 
-                  real( tr( tau3 * ( Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) ); 
-        Idcw4rl = real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar ) ) ) + 
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar ) ) ) + 
-                  real( tr( tau3 * ( Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) );
-        
-        Idcw6lr = real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) );                                    
-        Idcw6rl = real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) );                                    
-
-        
-        Idcw8lr = real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) ) +
-                  real( tr( tau3 * ( Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar ) ) );                                    
-        Idcw8rl = real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * grwar * Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * grwar * Siglr * glwar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) ) +
-                  real( tr( tau3 * ( Sigrl * glwar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar * Sigrl * gawar * Siglr * gawar ) ) ); 
-
-        Idcw[hi] = Idcw[hi] + Idcw2lr + Idcw4lr + Idcw6lr + Idcw8lr - Idcw2rl - Idcw4rl - Idcw6rl - Idcw8rl;
-    end
-    
-    Idc = (deltaw1/(2*pi)) * sum(Idcw);
-
-    return Idc
-end
-
-"""
-    currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, phi) -> Float64
+    currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR) -> Float64
 
 Equilibrium Josephson current at fixed phase `phi`, to ALL orders in the
-transparency (full Dyson resummation, non-perturbative). Assembles the 4×4
-(two-lead ⊗ Nambu) junction self-energy `Sigrj`, solves the Dyson equation
-`Grj = (I − grj·Sigrj)⁻¹ grj` and the Keldysh `Glj = Grj·Siglj·Grj†` at each
-frequency, and integrates the current trace. The exact counterpart of
-[`currentPhi_eq_T2`](@ref)…`_T8`; used by `Josephson_cphir.jl` to build the exact
-current–phase relation.
+transparency (full Dyson resummation, non-perturbative), in the 4x4 Nambu(x)spin
+basis with per-lead YSR impurities. Assembles the 8x8 (two-lead ⊗ Nambu(x)spin)
+junction self-energy `Sigrj` and the per-lead bare propagator
+`grj = diag(g_L, g_R)` with `g_α = (I − g0 V_imp^α)⁻¹ g0`, solves the Dyson
+equation `Grj = (I − grj·Sigrj)⁻¹ grj` and the Keldysh `Glj = Grj·Siglj·Grj†` at
+each frequency, and integrates the current trace `tr[(τz⊗σ0)(Σ_LR G<_RL − Σ_RL
+G<_LR)]`. The exact counterpart of [`currentPhi_eq_T2`](@ref)/`_T4`; reduces to 2x
+the 2x2 clean result when `J=K=0`. Used by `Josephson_cphir.jl`.
 """
-function currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, phi)
-    Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]); tau3 = [1 0; 0 -1];
+function currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
+    Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]);
+    tz = ComplexF64[1 0 0 0; 0 1 0 0; 0 0 -1 0; 0 0 0 -1];
+    sigx = ComplexF64[0 1; 1 0]; sigy = ComplexF64[0 -im; im 0]; sigz = ComplexF64[1 0; 0 -1]; sig0 = ComplexF64[1 0; 0 1]; tauz = ComplexF64[1 0; 0 -1];
+    JsL = JL[1]*sigx + JL[2]*sigy + JL[3]*sigz; VimpL = [JsL zeros(ComplexF64,2,2); zeros(ComplexF64,2,2) -conj(JsL)] + KL*kron(tauz,sig0);
+    JsR = JR[1]*sigx + JR[2]*sigy + JR[3]*sigz; VimpR = [JsR zeros(ComplexF64,2,2); zeros(ComplexF64,2,2) -conj(JsR)] + KR*kron(tauz,sig0);
 
-    Sigrl = zeros(ComplexF64, 2,2); Sigrl =  T .* [exp(-im*phi/2) 0; 0 -exp(+im*phi/2)];
-    Siglr = zeros(ComplexF64, 2,2); Siglr =  T .* [exp(+im*phi/2) 0; 0 -exp(-im*phi/2)];
-    
-    Sigrj = [zeros(ComplexF64,2,2) Siglr; Sigrl zeros(ComplexF64,2,2)];
-    
+    Sigrl = T .* kron(ComplexF64[exp(-im*phi/2) 0; 0 -exp(+im*phi/2)], sig0);
+    Siglr = T .* kron(ComplexF64[exp(+im*phi/2) 0; 0 -exp(-im*phi/2)], sig0);
+    Sigrj = [zeros(ComplexF64,4,4) Siglr; Sigrl zeros(ComplexF64,4,4)];
+
     Idcw = zeros(Float64,Nw1);
     Threads.@threads for hi = 1:Nw1
-        # fac = exp(-(ww+ij*Omega)^2 / (zeta^2));
-        fac = 1;
+        wwab = war1[hi]; z = wwab + im*Gamma; ff = (wwab < 0);
+        g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+        grL = (I(4) - g0*VimpL) \ g0; gaL = grL'; gl0L = -(grL - gaL);
+        grR = (I(4) - g0*VimpR) \ g0; gaR = grR'; gl0R = -(grR - gaR);
 
-        wwab = war1[hi];
-        grwar = fac * 1/( zeta*sqrt(delta^2-(wwab+im*Gamma)^2) ) .* [-(wwab+im*Gamma) delta; delta -(wwab+im*Gamma)];
-        glwar = -2*im*(wwab .< 0) .* imag.(grwar);
-        gawar = conj(transpose(grwar));
-        
-        Siglj = ( im*2*Gamma*I(4) + [ zeta^2 .* ( tau3 * glwar * tau3 ) zeros(ComplexF64,2,2); zeros(ComplexF64,2,2) zeta^2 .* ( tau3 * glwar * tau3 ) ] ) .* (wwab .< 0);
-        grjwar = [grwar zeros(ComplexF64,2,2); zeros(ComplexF64,2,2) grwar];
-        Grjwar = (I(4) - grjwar*Sigrj) \ grjwar;
-        Gljwar = Grjwar * Siglj * conj(transpose(Grjwar));
+        Siglj = ff .* ( im*2*Gamma*I(8) + [ zeta^2 .* (tz*gl0L*tz) zeros(ComplexF64,4,4); zeros(ComplexF64,4,4) zeta^2 .* (tz*gl0R*tz) ] );
+        grjwar = [grL zeros(ComplexF64,4,4); zeros(ComplexF64,4,4) grR];
+        Grjwar = (I(8) - grjwar*Sigrj) \ grjwar;
+        Gljwar = Grjwar * Siglj * Grjwar';
 
-        Idcwlr = real( tr( tau3 * ( Siglr * Gljwar[3:4,1:2] ) ) );
-        Idcwrl = real( tr( tau3 * ( Sigrl * Gljwar[1:2,3:4] ) ) );
-        
-        Idcw[hi] = Idcw[hi] + Idcwlr - Idcwrl;
+        Idcwlr = real( tr( tz * ( Siglr * Gljwar[5:8,1:4] ) ) );
+        Idcwrl = real( tr( tz * ( Sigrl * Gljwar[1:4,5:8] ) ) );
+
+        Idcw[hi] = Idcwlr - Idcwrl;
     end
     Idc = (deltaw1/(2*pi)) * sum(Idcw);
 
