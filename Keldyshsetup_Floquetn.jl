@@ -9,15 +9,39 @@ using OhMyThreads: TaskLocalValue
 using Symbolics
 using SparseArrays
 
-BLAS.set_num_threads(1) # Avoid contention with threaded loop. Run with julia -t$num_threads
-# 1. Julia's thread pool: fixed at startup by julia -t16. Used by Threads.@threads, ... 
-#    Controlled by Threads.nthreads(). Outer parallelism, running different loop iterations on 
-#    different threads.
-# 2. MKL/BLAS's own internal pool: separate, owned by MKL, not Julia. Controlled by 
-#    BLAS.get_num_threads(). Inner parallelism, splitting one single mul!/*/\ across threads.
-#    These are independent. -t does nothing to BLAS; BLAS.set_num_threads does nothing to @threads.
-# The workload is many independent medium-size (N~500) double-complex matmuls/solves. 
-# For that shape, outer (loop-level) parallelism beats inner (BLAS-level) parallelism
+BLAS.set_num_threads(1) # Avoid contention with threaded loop. Run with julia -t num_threads.
+# The workload is many independent medium-size (N ~ 500) double-complex matmuls/solves
+# (the per-frequency Dyson solve Gr = (I - gr*Sig)\gr, the Keldysh product Gr*Sig<*Ga, and
+# the per-column derivative chains in the Jacobian).
+#
+# --- Total thread budget and oversubscription ---
+# The total number of worker threads is fixed at startup by `julia -t num_threads`, i.e.
+# num_threads = Threads.nthreads(). The two pools above run NESTED: when a Threads.@threads
+# loop body calls a BLAS routine, the EFFECTIVE concurrency is the PRODUCT
+#       Threads.nthreads()  x  BLAS.get_num_threads().
+# If both are large this OVERSUBSCRIBES the machine -- e.g. `julia -t16` with MKL's default
+# (~16 BLAS threads) launches ~16 x 16 = 256 threads fighting over ~16 cores, which thrashes
+# caches and is much slower than 16. So the cores must be PARTITIONED between
+#   (a) the Julia for-loop  -- OUTER parallelism: different loop iterations on different
+#       threads (one whole matrix per thread), and
+#   (b) BLAS               -- INNER parallelism: one mul!/*/\ split across threads.
+# We want  nthreads(Julia) x BLAS_threads  ~ (physical cores), not their naive product.
+#
+# --- Design choice for THIS code ---
+# 1. Matrices are only small to medium-sized, the regime where BLAS multithreading scales
+#    POORLY (per-call fork/join overhead, limited arithmetic intensity): running whole
+#    matrices concurrently beats splitting one matrix across threads. So we give BLAS a
+#    SINGLE thread (BLAS.set_num_threads(1) above) and hand the ENTIRE thread budget to the
+#    for loop:  nthreads(Julia) x 1 = nthreads, one matrix per thread, no oversubscription.
+# 2. Of the two candidate loops to parallelize -- the Floquet-mode loop (2Nf+1 modes, or the
+#    4Nf Jacobian derivative columns) and the frequency-grid loop (Nw0 = Omega/dw0 points) --
+#    the number of Floquet modes (tens) is MUCH SMALLER than the number of frequency-grid
+#    points (hundreds to thousands). So we put the Threads.@threads parallelism on the
+#    FREQUENCY loop (chunked, see IbiasJacobian_Tfull / current_Floquet_Tfull): it exposes
+#    far more independent tasks and keeps every thread busy. This is especially good on HPC
+#    nodes with many threads -- more than the number of Floquet modes -- where the frequency
+#    grid still has enough work to saturate all of them, whereas threading the (small)
+#    Floquet/column loop would leave most threads idle.
 
 
 ## ============ Perturbative current symbolic expression ==============
@@ -247,7 +271,7 @@ function current_Vbias_Floquet_Tfull(war1, ev, zeta, delta, T, Gamma)
     VipI = zeros(ComplexF64, 4*Nf+1);
     VipI[2*Nf] = 1; 
     
-    If = Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta1, T, Gamma, VipI, 1, 0);
+    If = Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta1, T, Gamma, VipI, 0);
     Ifa = zeros(ComplexF64, 4*Nf+1);
     for kl = -Nf:Nf
         for lm = -Nf:Nf
@@ -1016,17 +1040,17 @@ function Gawmnf(ww, Omega, Nf, zeta, delta, T, Gamma, Vip)
 end
 
 """
-    Siglf(ww, Omega, Nf, zeta, delta, T, Gamma, Sigl_s) -> Matrix{ComplexF64}
+    Siglf(ww, Omega, Nf, zeta, delta, T, Gamma) -> Matrix{ComplexF64}
 
-Lesser self-energy Σ< in the Floquet–Nambu–lead basis, with two additive
-contributions selected by flags:
-- `Sigl_s == 1`: embeds the semi-infinite-lead occupation into the contact site via
-  the surface term `ζ²·τ₃ g< τ₃` (method 1); `Sigl_s == 2` uses an alternative
-  retarded-self-energy-difference embedding (method 2).
-Supplies the occupation information for the Keldysh equation in
-[`Glesser_Floquet_Tfull`](@ref).
+Lesser self-energy Σ< in the Floquet–Nambu–lead basis. It embeds the
+semi-infinite-lead occupation into the contact site via the surface term
+`ζ²·τ₃ g< τ₃` (method 1). The internal flag `Sigl_s` selects the embedding scheme
+and is hardcoded to `1` (it was formerly a function argument; `Sigl_s == 2` would
+select an alternative retarded-self-energy-difference embedding). Supplies the
+occupation information for the Keldysh equation in [`Glesser_Floquet_Tfull`](@ref).
 """
-function Siglf(ww, Omega, Nf, zeta, delta, T, Gamma, Sigl_s)
+function Siglf(ww, Omega, Nf, zeta, delta, T, Gamma)
+    Sigl_s = 1;  # surface-embedding flag (hardcoded; formerly a function argument)
     Siglbath = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); 
     Siglsurface = zeros(ComplexF64, 4*(2*Nf+1),4*(2*Nf+1)); 
         
@@ -1067,7 +1091,7 @@ function Siglf(ww, Omega, Nf, zeta, delta, T, Gamma, Sigl_s)
 end
 
 """
-    Glesser_Floquet_Tfull(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, Sigl_s,
+    Glesser_Floquet_Tfull(ww, Omega, Nf, zeta, delta, T, Gamma, Vip,
                           Grwmn=nothing, Gawmn=nothing, Sigl=nothing) -> Matrix{ComplexF64}
 
 Full (all-orders in 𝒯) LESSER Green's function via the Keldysh equation
@@ -1075,7 +1099,7 @@ Full (all-orders in 𝒯) LESSER Green's function via the Keldysh equation
 optional `Grwmn`, `Gawmn`, `Sigl` allow passing precomputed pieces to avoid
 recomputation. This is the exact-Dyson scheme (`ws=0`).
 """
-function Glesser_Floquet_Tfull(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, Sigl_s, Grwmn = nothing, Gawmn = nothing, Sigl = nothing)
+function Glesser_Floquet_Tfull(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, Grwmn = nothing, Gawmn = nothing, Sigl = nothing)
     if isnothing(Grwmn)
         Grwmn = Keldyshsetup_Floquetn.Grwmnf(ww, Omega, Nf, zeta, delta, T, Gamma, Vip);
         # Gawmn = Keldyshsetup_Floquetn.Gawmnf(ww, Omega, Nf, zeta, delta, T, Gamma, Vip);
@@ -1083,7 +1107,7 @@ function Glesser_Floquet_Tfull(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, Sigl_s
     end
 
     if isnothing(Sigl)
-        Sigl = Keldyshsetup_Floquetn.Siglf(ww, Omega, Nf, zeta, delta, T, Gamma, Sigl_s);
+        Sigl = Keldyshsetup_Floquetn.Siglf(ww, Omega, Nf, zeta, delta, T, Gamma);
     end
 
     Glwmn = Grwmn*Sigl*Gawmn;
@@ -1199,7 +1223,7 @@ end
 
 
 """
-    current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, Sigl_s, iterprint) -> Matrix{ComplexF64}
+    current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint) -> Matrix{ComplexF64}
 
 Floquet-mode-resolved current for a given phase solution `Vip`, exact in 𝒯. At each
 energy in `war0` it forms `G<` via [`Glesser_Floquet_Tfull`](@ref) and the current
@@ -1209,7 +1233,7 @@ matrix `Iif[m,n]`; its diagonal sum is the DC current and the off-diagonals are 
 AC harmonics. The core current evaluator used by the drivers and by
 [`IbiasResidual_Tfull`](@ref).
 """
-function current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, Sigl_s, iterprint)
+function current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint)
     Nw0 = length(war0); deltaw0 = abs(war0[2]-war0[1]);
 
     Vvi = Keldyshsetup_Floquetn.Viwmnf(Vip, Nf, T); #Has extra tau_z Nambu Pauli matrix needed in current calculation
@@ -1217,7 +1241,7 @@ function current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, Sigl
     Iiwf = zeros(ComplexF64, 2*Nf+1,2*Nf+1,Nw0);
     Threads.@threads for ij = 1:Nw0
         # println(ij)
-        Glwmn = Keldyshsetup_Floquetn.Glesser_Floquet_Tfull(war0[ij], Omega, Nf, zeta, delta, T, Gamma, Vip, Sigl_s)
+        Glwmn = Keldyshsetup_Floquetn.Glesser_Floquet_Tfull(war0[ij], Omega, Nf, zeta, delta, T, Gamma, Vip)
         Itemp0 = -Vvi*Glwmn; #Has extra tau_z Nambu Pauli matrix needed in current calculation
         ##--m2--
         Threads.@threads for jk = 1:2*Nf+1
@@ -1433,7 +1457,7 @@ function Viwmnf(Vip, Nf, T)
 end
 
 """
-    IbiasResidual_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_s, iterprint) -> Vector{Float64}
+    IbiasResidual_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint) -> Vector{Float64}
 
 Residual `F(x)` of the current-bias self-consistency problem, exact in 𝒯. The
 unknown real vector `Vipi` (length 4Nf) packs the real and imaginary parts of the
@@ -1444,7 +1468,7 @@ unknown real vector `Vipi` (length 4Nf) packs the real and imaginary parts of th
    [`current_Floquet_Tfull`](@ref).
 A root of `F` is the self-consistent phase whose voltage carries only DC current.
 """
-function IbiasResidual_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_s, iterprint)
+function IbiasResidual_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint)
     Vip = zeros(ComplexF64, 4*Nf+1);
     for jk = 1:2*Nf
         Vip[2*jk] = Vipi[jk] + im*Vipi[(2*Nf)+jk]; #Vipi only has odd harmonics of eV
@@ -1468,7 +1492,7 @@ function IbiasResidual_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_
     eqns[2*Nf] = sum( imag.(Vip) );
     
     #--Current--
-    Iif = Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, Sigl_s, iterprint);
+    Iif = Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, iterprint);
     Ifa = zeros(ComplexF64, 4*Nf+1);
     for kl = -Nf:Nf
         for lm = -Nf:Nf
@@ -1587,7 +1611,7 @@ end
 #-----Jacobian calculation
 
 """
-    IbiasJacobian_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_s, iterprint) -> Matrix{Float64}
+    IbiasJacobian_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint) -> Matrix{Float64}
 
 Analytic Jacobian `J_{ij}=∂F_i/∂x_j` of [`IbiasResidual_Tfull`](@ref) (4Nf×4Nf).
 The unitarity/gauge-constraint rows are differentiated in closed form (polynomial in
@@ -1597,7 +1621,7 @@ The unitarity/gauge-constraint rows are differentiated in closed form (polynomia
 `M_j=∂V/∂x_j` sparse and constant), reorganized so `−Vᵢ·Gʳ` and `−Vᵢ·G<` are formed
 once per energy. Passed to `NLsolve` for the trust-region Newton solve.
 """
-function IbiasJacobian_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_s, iterprint)
+function IbiasJacobian_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, iterprint)
     # --- Unpack the real unknown vector into complex phase Fourier coefficients ---
     # Vipi = [ Re(W_1)…Re(W_2Nf) ; Im(W_1)…Im(W_2Nf) ], the 2Nf odd harmonics of exp(-iφ/2).
     # Stored in the even slots of Vip (odd harmonics of eV); even harmonics stay zero.
@@ -1693,7 +1717,7 @@ function IbiasJacobian_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_
         end
         Grwmn = Keldyshsetup_Floquetn.Grwmnf(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip);
         Gawmn = conj(transpose(Grwmn));
-        Sigl = Siglf(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Sigl_s);
+        Sigl = Siglf(war0[gh], Omega, Nf, zeta, delta, T, Gamma);
         mul!(Glwmntemp, Grwmn, Sigl); mul!(Glwmn, Glwmntemp, Gawmn);
         mul!(VviGrwmn, -Vvi, Grwmn); mul!(VviGlwmn, -Vvi, Glwmn);
         Threads.@threads for ij = 1:(4*Nf)
@@ -1726,7 +1750,7 @@ function IbiasJacobian_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_
         for gh = (cb[c]+1):cb[c+1]
             Grwmn = Keldyshsetup_Floquetn.Grwmnf(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip); # full retarded GF (Dyson, exact in T)
             Gawmn = conj(transpose(Grwmn));                                            # advanced GF = (Gr)†
-            Sigl = Siglf(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Sigl_s);  # lesser self-energy Σ<
+            Sigl = Siglf(war0[gh], Omega, Nf, zeta, delta, T, Gamma);  # lesser self-energy Σ<
             mul!(Glwmntemp, Grwmn, Sigl); mul!(Glwmn, Glwmntemp, Gawmn);               # Keldysh lesser GF: G< = Gr·Σ<·Ga
             mul!(VviGrwmn, -Vvi, Grwmn); mul!(VviGlwmn, -Vvi, Glwmn);                  # vertex prefactors -Vᵢ·Gr and -Vᵢ·G<
             for ij = 1:(4*Nf) #variable (for derivative in Jacobian) index
@@ -2195,7 +2219,7 @@ function Vt(Vipi, Nf, tar0, Omega)
 end
 
 """
-    phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Sigl_s,
+    phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma,
              Vipsolseed=nothing, Nevseed=nothing) -> (Iv, Vipsol, residualarr)
 
 Main current-bias driver. For each bias `eV` in `evar` (swept high→low with
@@ -2211,7 +2235,7 @@ spacing; optional `Vipsolseed`/`Nevseed` warm-start the highest-bias point.
 - `Vipsol`: solved phase coefficients per bias (rows).
 - `residualarr`: final residual norm per bias.
 """
-function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Sigl_s, Vipsolseed = nothing, Nevseed = nothing)
+function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Vipsolseed = nothing, Nevseed = nothing)
     Nev = length(evar);
 
     If = zeros(ComplexF64, Nev,2*Nf+1,2*Nf+1); Ifa = zeros(ComplexF64, Nev,4*Nf+1); Iv = zeros(Float64, Nev);
@@ -2248,7 +2272,7 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Sigl_s, Vipsolseed =
         elseif ws == 2
             fvalue = norm(Keldyshsetup_Floquetn.IbiasResidual_T2(Vipseed, war0, Omega, Nf, zeta, delta, T, Gamma,  hi));
         elseif ws == 0
-            fvalue = norm(Keldyshsetup_Floquetn.IbiasResidual_Tfull(Vipseed, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_s, hi));
+            fvalue = norm(Keldyshsetup_Floquetn.IbiasResidual_Tfull(Vipseed, war0, Omega, Nf, zeta, delta, T, Gamma, hi));
         end
         
         if fvalue < ftols
@@ -2262,7 +2286,7 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Sigl_s, Vipsolseed =
             elseif ws == 2 
                 res = nlsolve(x -> Keldyshsetup_Floquetn.IbiasResidual_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi), x -> Keldyshsetup_Floquetn.IbiasJacobian_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
             elseif ws == 0 
-                res = nlsolve(x -> Keldyshsetup_Floquetn.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_s, hi), x -> Keldyshsetup_Floquetn.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_s, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
+                res = nlsolve(x -> Keldyshsetup_Floquetn.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi), x -> Keldyshsetup_Floquetn.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
             end
             
             t1 = time()
@@ -2283,7 +2307,7 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Sigl_s, Vipsolseed =
         elseif ws == 2 
             If[hi,:,:] = Keldyshsetup_Floquetn.current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, hi);
         elseif ws == 0 
-            If[hi,:,:] = Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, Sigl_s, hi);
+            If[hi,:,:] = Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, hi);
         end
         
         for kl = -Nf:Nf
@@ -2319,7 +2343,7 @@ function RN_full(Nf, dw0, zeta, delta, T, Gamma)
     VipI = zeros(ComplexF64, 4*Nf+1);
     VipI[2*Nf] = 1; 
     
-    If = Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta1, T, Gamma, VipI, 1, 0);
+    If = Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta1, T, Gamma, VipI, 0);
     Ifa = zeros(ComplexF64, 4*Nf+1);
     for kl = -Nf:Nf
         for lm = -Nf:Nf

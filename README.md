@@ -91,11 +91,18 @@ The hot loops use `Threads.@threads`; start Julia with multiple threads
 
 ## Usage
 
-The scripts are run interactively. From the repository directory, in a Julia
-session, e.g.:
-
+The code leverages multi-threading. Start Julia with 
+```
+julia -t num_threads
+```
+and run the driver scripts interactively in the Julia REPL as
 ```julia
 include("Josephson_Ibias_Floquetn.jl")   # current-biased I–V (main result)
+```
+
+Or, you may run it directly as
+```
+julia -t num_threads Josephson_Ibias_Floquetn.jl
 ```
 
 Each driver sets its parameters at the top (`Nf` Floquet harmonics, `delta`,
@@ -110,12 +117,8 @@ re-loading a cached result requires matching them.
 `Keldyshsetup_Floquetn_ext.jl` extends the formalism to the full Nambu⊗spin
 basis `(c↑, c↓, c↑†, c↓†)`, so that **classical-spin (magnetic) impurities** can
 be placed on each lead via a local Dyson dressing of the surface Green's
-function, `g = (1 − g₀ V_imp)⁻¹ g₀`. This produces Yu–Shiba–Rusinov (YSR) bound
-states and, for non-collinear or unequal leads (`J_L ∦ J_R`), the non-reciprocal
-**Josephson diode** regime. Each lead carries its own exchange and potential
-scattering, passed as `JL, KL, JR, KR`. With `J = K = 0` the extension reduces to
-exactly twice the 2×2 result (spin degeneracy). The corresponding derivation is
-Section 10 of the technical notes in `docs/`.
+function. Each lead carries its own exchange and potential scattering terms, passed 
+as `JL, KL, JR, KR`. he corresponding derivation is Section 10 of the technical notes in `docs/`.
 
 ## Citation
 

@@ -40,7 +40,6 @@ JR = [0.0, 0.0, 0.0]; KR = 0.0;
 Nev = 30; evar = delta*range(0.05, 3.25, Nev);
 
 #Lesser self energy
-Sigl_s = 1;
 
 #Scheme (only ws=0 supported in the 4x4 ext module)
 ws = 0;
@@ -71,7 +70,7 @@ for hi = 1:Nev
     Nw0 = trunc(Int, Omega/dw0);
     war0 = -0.5*Omega .+ range(0, (Nw0-1)*Omega/Nw0, Nw0);
 
-    If[hi,:,:] = Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, Sigl_s, JL, KL, JR, KR, hi);
+    If[hi,:,:] = Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi);
 
     for kl = -Nf:Nf
         for lm = -Nf:Nf
