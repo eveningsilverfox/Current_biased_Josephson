@@ -152,7 +152,7 @@ ylims!(0,2+0.2)
 xlabel!(L"t/T_0")
 ylabel!(L"\phi/(2\pi)")
 plot!(legend=:topleft, legendtitle=L"T/\zeta", titlefontsize=22, tickfontsize=20, guidefontsize = 20, legendfontsize = 20, legendtitlefontsize = 20, left_margin=4Plots.mm, bottom_margin=3Plots.mm, right_margin=7Plots.mm, dpi=600)
-savefig(p0, "Vt" * str2 * "_ev$(round(evar[evct]; digits = 3))" * ".png")  
+savefig(plot!(p0, dpi=450), "Vt" * str2 * "_ev$(round(evar[evct]; digits = 3))" * ".png")  
 
 evmin = 1;
 # evmax = trunc(Int, 0.75*Nev);
@@ -215,8 +215,7 @@ ylims!(0.31,1.1)
 xlabel!(L"eV/\Delta")
 plot!(titlefontsize=20, tickfontsize=17, guidefontsize = 17, legendfontsize = 12, legendtitlefontsize = 13)
 p_finala = plot(p2ab1, p2ab2, p2ab3, p2ab4, p2ab5, layout=(1,5), size=(2300,400), right_margin=2Plots.mm)
-display(p_finala)
-savefig(p_finala, "IV_lu_Ibias1_" * str2 * ".png")  
+savefig(plot!(p_finala, dpi=450), "IV_lu_Ibias_" * str2 * ".png")  
 
 evmin = 1;
 # evmax = trunc(Int, 0.75*Nev);
@@ -264,5 +263,5 @@ vline!([2/5],linestyle=:dash,lc=:red, label="")
 xlabel!(L"eV/\Delta")
 plot!(titlefontsize=20, tickfontsize=17, guidefontsize = 17, legendfontsize = 12, legendtitlefontsize = 13)
 p_final1 = plot(p2b11, p2b21, p2b31, p2b41, p2b51, layout=(1,5), size=(2300,400), right_margin=2Plots.mm)
-display(p_final1)
-savefig(p_final1, "dIdV_Ibias1_" * str2 * ".png")  
+savefig(plot!(p_finala, dpi=450), "dIdV_Ibias_" * str2 * ".png")  
+

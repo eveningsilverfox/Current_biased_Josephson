@@ -105,8 +105,8 @@ vline!([2/6],linestyle=:dash,lc=:red, label="")
 xlabel!(L"eV")
 ylabel!(L"I(V) R_N")
 plot!(titlefontsize=20)
-plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17)
-# savefig(p2, "IV_" * str2 * ".png")  
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
+savefig(plot!(p2, dpi=450), "IV_Vbias_" * str2 * ".png")  
 
 evmin = 1;
 evmax = Nev;
@@ -120,5 +120,5 @@ vline!([2/6],linestyle=:dash,lc=:red, label="")
 xlabel!(L"eV/\Delta")
 ylabel!(L"(dI/dV) RN")
 plot!(titlefontsize=20)
-plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17)
-# savefig(p2v, "dIdV* str2 * ".png")  
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
+savefig(plot!(p2v, dpi=450), "dIdV_Vbias_" * str2 * ".png")  

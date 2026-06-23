@@ -59,10 +59,10 @@ plot!(Tar ./ zeta, IcfTar .* RNTar, label=L"ex. \mathcal{T}^\infty", lc=:gray, l
 xlabel!(L"T"); ylabel!(L"I_c")
 plot!(legend=:bottomleft, legendfontsize=14, titlefontsize=20, tickfontsize=17, guidefontsize = 17)
 display(p3)
-# savefig(p3, "cphi_" * str1 * ".png")
+savefig(plot!(p3, dpi=450), "cphi_" * str1 * ".png")
 
 p5 = plot(Tar ./ zeta, RNTar, label=L"R_N", lc=:blue, lw=1.5, framestyle = :box)
 xlabel!(L"T/\zeta"); ylabel!(L"R_N")
 plot!(legendfontsize=14, titlefontsize=20, tickfontsize=17, guidefontsize = 20, legend=:topright)
 display(p5)
-# savefig(p5, "RN_" * str1 * ".png")
+savefig(plot!(p5, dpi=450), "RN_" * str1 * ".png")

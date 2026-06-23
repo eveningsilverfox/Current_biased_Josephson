@@ -137,32 +137,14 @@ end
 
 
 ## ----------Plots----------
-mlen = 5;
-pm4 = heatmap(range(-mlen,+mlen,2*mlen+1), evar,abs.(Vipsol_complex[:,2*Nf+1-mlen:2*Nf+1+mlen]));
-xlabel!(L"m [\Omega]")
-ylabel!(L"eV/\Delta")
-plot!(titlefontsize=20, tickfontsize=17, guidefontsize = 17, legendfontsize = 17, legendtitlefontsize = 17, legend=:topleft)
-pm4p = plot(evar,abs.(Vipsol_complex[:,2*Nf+1-1]), label=L"1", framestyle = :box);
-plot!(evar,abs.(Vipsol_complex[:,2*Nf+1-3]), label=L"3", framestyle = :box)
-plot!(evar,abs.(Vipsol_complex[:,2*Nf+1-5]), label=L"5", framestyle = :box)
-plot!(evar,abs.(Vipsol_complex[:,2*Nf+1-7]), label=L"7", framestyle = :box)
-ylabel!(L"W_{m}")
-xlabel!(L"eV/\Delta")
-plot!(legend=:right,titlefontsize=20, tickfontsize=17, guidefontsize = 17, legendfontsize = 17, legendtitlefontsize = 17)
-p_finalm4 = plot(pm4, pm4p, layout=(1,2), size=(1100,440), right_margin=4Plots.mm)
-display(p_finalm4)
-# savefig(pm4, "Vt" * str2 * "_ev$(round(evar[evct]; digits = 3))" * ".png")  
-
 evct = 7;
 p0 = plot(tar0/(2*pi/(2*evar[evct])), Vt[evct,:]/(2*pi), framestyle = :box)
 xlims!(0,1)
 ylims!(0,1+0.2)
 xlabel!(L"t/(2\pi/\omega_J)")
 ylabel!(L"\phi/(2\pi)")
-plot!(titlefontsize=20)
-plot!(legend=:topleft, legendtitle=L"T/\zeta", titlefontsize=20, tickfontsize=17, guidefontsize = 17, legendfontsize = 12, legendtitlefontsize = 13)
-display(p0)
-# savefig(p0, "Vt" * str2 * "_ev$(round(evar[evct]; digits = 3))" * ".png")  
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
+savefig(plot!(p0, dpi=450), "Vt_Ibias_" * str2 * ".png")
 
 evmin = 1; evmax = 26;
 p2 = plot(evar[evmin:Nev]/delta, Iv[evmin:Nev] .* RN, lc=:blue, lw=1.5, framestyle = :box,titlefontsize=20)
@@ -175,8 +157,8 @@ vline!([2/5],linestyle=:dash,lc=:gray, label="")
 xlabel!(L"eV/\Delta")
 ylabel!(L"IeR_N/\Delta")
 plot!(titlefontsize=20)
-plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17)
-savefig(p2, "IV_Ibias_s_" * str2 * ".png")  
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
+savefig(plot!(p2, dpi=450), "IV_Ibias_" * str2 * ".png")
 
 evmin = 1;
 # evmax = trunc(Int, 0.75*Nev);
@@ -191,8 +173,8 @@ vline!([2/6],linestyle=:dash,lc=:red)
 xlabel!(L"eV/\Delta")
 ylabel!(L"(dI/dV)eR_N/\Delta")
 plot!(titlefontsize=20)
-plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17)
-# savefig(p2v, "dIdV_Ibias1_" * str2 * ".png")  
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
+savefig(plot!(p2v, dpi=450), "dIdV_Ibias_" * str2 * ".png")
 
 if ws == 2
     pm2 = plot(evar/delta, Iv2_2, label=L"I^{(4)}(\phi_2)", lc=:blue, lw=1.5, framestyle = :box,titlefontsize=20)
