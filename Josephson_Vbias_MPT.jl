@@ -165,9 +165,7 @@ if delta != 0
     ylabel!(L"(dI^{(4)}/dV)/(e\mathcal{T}^4)")
     plot!(titlefontsize=21, tickfontsize=18, guidefontsize = 18, legendtitle=L"[a, b]", legendfontsize = 14, legendtitlefontsize = 14, legend=:topright)
     p_final3 = plot(p3, p31, layout=(1,2), size=(1100,440), right_margin=4Plots.mm, left_margin=8Plots.mm, bottom_margin=8Plots.mm)
-    display(p_final3)
-    # savefig(p_final3, "dIdV_" * str2 * ".png")  
-    # savefig(p_final3, "Fig6.png")  
+    savefig(plot!(p_final3, dpi=450), "dIdV_MPT_" * str2 * ".png") 
 
     p2p = plot(evar ./ (2*delta), dIdv2_pair ./ T^2, lw=1.25, lc=:blue, label=L"n=2", framestyle = :box)
     plot!(evar ./ (2*delta), dIdv4_pair ./ T^4, lw=1.25, lc=:red, label=L"n=4", framestyle = :box)
@@ -201,11 +199,9 @@ if delta != 0
     ylabel!(L"(dI_{\mathrm{pair}}^{(4)}/dV)/(e\mathcal{T}^4)")
     plot!(titlefontsize=21, tickfontsize=18, guidefontsize = 18, legendtitle=L"[a, b]", legendfontsize = 14, legendtitlefontsize = 14, legend=:bottom)
     p_final2p = plot(p2p, p2p1, layout=(1,2), size=(1100,440), right_margin=4Plots.mm, left_margin=8Plots.mm, bottom_margin=8Plots.mm)
-    display(p_final2p)
-    # savefig(p_final2p, "I_dIdV_24pair" * str2 * ".png")  
-    savefig(p_final2p, "IbiasFig5.png")  
+    savefig(plot!(p_final2p, dpi=450), "dIdV_pair_MPT_" * str2 * ".png")    
 
-    p2p = plot(evar ./ (2*delta), dIdv2_nn ./ T^2, lw=1.25, lc=:blue, label=L"n=2", framestyle = :box)
+    p2n = plot(evar ./ (2*delta), dIdv2_nn ./ T^2, lw=1.25, lc=:blue, label=L"n=2", framestyle = :box)
     plot!(evar ./ (2*delta), dIdv4_nn ./ T^4, lw=1.25, lc=:red, label=L"n=4", framestyle = :box)
     # plot!(evar ./ (2*delta), dIdv6_pair ./ T^6, lw=1.25, lc=:green, label=L"n=6", framestyle = :box)
     vline!([1/1],linestyle=:dash,lc=:gray, label="")
@@ -220,7 +216,7 @@ if delta != 0
     xlabel!(L"\Omega/2\Delta")
     ylabel!(L"(dI_{\mathrm{normal}}^{(2)}/dV)/(e\mathcal{T}^2)")
     plot!(titlefontsize=21, tickfontsize=18, guidefontsize = 18, legendfontsize = 14, legendtitlefontsize = 14, legend=:topleft)
-    p2p1 = plot(evar ./ (2*delta), 1e-2 .* dIdv4_nn ./ T^4, lw=1.25, lc=:blue, label=L"[1,1] (\times 10^{-3})", framestyle = :box)
+    p2n1 = plot(evar ./ (2*delta), 1e-2 .* dIdv4_nn ./ T^4, lw=1.25, lc=:blue, label=L"[1,1] (\times 10^{-3})", framestyle = :box)
     plot!(evar ./ (2*delta), 1e1 * dIdv4ab_nn ./ T^4, lw=1.25, lc=:green, label=L"[3,5]", framestyle = :box)
     vline!([1/1],linestyle=:dash,lc=:gray, label="")
     vline!([1/2],linestyle=:dash,lc=:gray, lw=1.5, label="")
@@ -236,10 +232,8 @@ if delta != 0
     xlabel!(L"\Omega/2\Delta")
     ylabel!(L"(dI_{\mathrm{normal}}^{(4)}/dV)/(e\mathcal{T}^4)")
     plot!(titlefontsize=21, tickfontsize=18, guidefontsize = 18, legendtitle=L"[a, b]", legendfontsize = 14, legendtitlefontsize = 14, legend=:bottom)
-    p_final2p = plot(p2p, p2p1, layout=(1,2), size=(1100,440), right_margin=4Plots.mm, left_margin=8Plots.mm, bottom_margin=8Plots.mm)
-    display(p_final2p)
-    # savefig(p_final2p, "I_dIdV_24pair" * str2 * ".png")  
-    savefig(p_final2p, "IbiasFig7.png")  
+    p_final2n = plot(p2n, p2n1, layout=(1,2), size=(1100,440), right_margin=4Plots.mm, left_margin=8Plots.mm, bottom_margin=8Plots.mm)
+    savefig(plot!(p_final2n, dpi=450), "dIdV_qp_MPT_" * str2 * ".png")  
 
 
 end

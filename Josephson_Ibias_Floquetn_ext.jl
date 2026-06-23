@@ -86,6 +86,15 @@ RN = Keldyshsetup_Floquetn_ext.RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, J
 # save("IV_Ibias_" * str2 * ".jld", "Iv", Iv);
 
 ## ----------Plots----------
+evct = 7;
+p0 = plot(tar0/(2*pi/(2*evar[evct])), Vt[evct,:]/(2*pi), framestyle = :box)
+xlims!(0,1)
+ylims!(0,1+0.2)
+xlabel!(L"t/(2\pi/\omega_J)")
+ylabel!(L"\phi/(2\pi)")
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
+savefig(plot!(p0, dpi=450), "Vt_Ibias_" * str2 * ".png")
+
 p2 = plot(evar/delta, Iv .* RN, lc=:blue, lw=1.5, framestyle=:box)
 vline!([2/1],linestyle=:dash,lc=:gray, label="")
 vline!([2/2],linestyle=:dash,lc=:gray, label="")
@@ -93,7 +102,8 @@ vline!([2/3],linestyle=:dash,lc=:gray, label="")
 vline!([2/4],linestyle=:dash,lc=:gray, label="")
 vline!([2/5],linestyle=:dash,lc=:gray, label="")
 xlabel!(L"eV/\Delta"); ylabel!(L"IeR_N/\Delta")
-plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17)
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
+savefig(plot!(p2, dpi=450), "IV_Ibias_" * str2 * ".png")
 
 p2v = plot(evar/delta, dIdv .* RN, lc=:blue, lw=1.5, framestyle=:box, legend=:topleft)
 vline!([2/1],linestyle=:dash,lc=:red, label="")
@@ -102,4 +112,5 @@ vline!([2/3],linestyle=:dash,lc=:red, label="")
 vline!([2/4],linestyle=:dash,lc=:red, label="")
 vline!([2/5],linestyle=:dash,lc=:red, label="")
 xlabel!(L"eV/\Delta"); ylabel!(L"(dI/dV)eR_N/\Delta")
-plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17)
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
+savefig(plot!(p2v, dpi=450), "dIdV_Ibias_" * str2 * ".png")

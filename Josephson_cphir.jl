@@ -55,7 +55,7 @@ ylabel!(L"I_c")
 plot!(titlefontsize=20)
 plot!(legend=:bottomleft, legendfontsize=14, titlefontsize=20, tickfontsize=17, guidefontsize = 17)
 display(p3)
-# savefig(p3, "cphi_" * str1 * ".png")  
+savefig(plot!(p3, dpi=450), "cphi_" * str1 * ".png")  
 
 GN = (8*pi/(zeta)^2) #1 -> T. T set to 1.
 RN = 1/GN;
@@ -69,5 +69,5 @@ ylabel!(L"R_N")
 plot!(titlefontsize=20)
 plot!(legendfontsize=14, titlefontsize=20, tickfontsize=17, guidefontsize = 20, legend=:topright)
 display(p5)
-# savefig(p5, "RN_" * str1 * ".png")  
+savefig(plot!(p5, dpi=450), "RN_" * str1 * ".png")  
 
