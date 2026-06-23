@@ -8,7 +8,16 @@ using NLsolve
 using OhMyThreads: TaskLocalValue
 using Symbolics
 using SparseArrays
-# BLAS.set_num_threads(1) # Avoid contention with threaded loop
+
+BLAS.set_num_threads(1) # Avoid contention with threaded loop. Run with julia -t$num_threads
+# 1. Julia's thread pool: fixed at startup by julia -t16. Used by Threads.@threads, ... 
+#    Controlled by Threads.nthreads(). Outer parallelism, running different loop iterations on 
+#    different threads.
+# 2. MKL/BLAS's own internal pool: separate, owned by MKL, not Julia. Controlled by 
+#    BLAS.get_num_threads(). Inner parallelism, splitting one single mul!/*/\ across threads.
+#    These are independent. -t does nothing to BLAS; BLAS.set_num_threads does nothing to @threads.
+# The workload is many independent medium-size (N~500) double-complex matmuls/solves. 
+# For that shape, outer (loop-level) parallelism beats inner (BLAS-level) parallelism
 
 
 ## ============ Extended 4x4 Nambu(x)spin building blocks (classical spins / YSR) ==============
@@ -1624,6 +1633,7 @@ function IbiasJacobian_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_
     Mar = Mar .* (abs.(Mar) .> 0.5*T*deltaV); Miar = -Miar .* (abs.(Miar) .> 0.5*T*deltaV); # drop numerical zeros; fold -1 of d(-Vi.G<) into Miar
 
     Marsp = [sparse(@view Mar[:,:,ij]) for ij = 1:4*Nf]; Miarsp = [sparse(@view Miar[:,:,ij]) for ij = 1:4*Nf];
+    #= ---- OLD: serial over Nw0 (frequency), threaded over the 4Nf columns. Kept for reference. ----
     Glwmntemp = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Glwmn = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); VviGrwmn = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); VviGlwmn = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
     tls = TaskLocalValue{Vector{Matrix{ComplexF64}}}( () ->
                      begin
@@ -1656,6 +1666,44 @@ function IbiasJacobian_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, Sigl_
             end
         end
     end
+    =#
+
+    # ---- NEW: thread over frequency CHUNKS (parallel width = up to Nw0). ----
+    # Each chunk owns a private accumulator `partials[c]` and its own scratch matrices (plain
+    # locals, allocated once per chunk and reused via mul! across the chunk's frequencies and the
+    # 4Nf columns) -- no TaskLocalValue needed, and per-chunk allocation is negligible vs compute.
+    # Pair with BLAS.set_num_threads(1) so this Julia-level parallelism isn't oversubscribed.
+    # (For heterogeneous P/E cores, raise nchunks and use `Threads.@threads :dynamic`.)
+    N8 = 8*(2*Nf+1);
+    nchunks = min(Nw0, max(Threads.nthreads(), 1));
+    cb = round.(Int, range(0, Nw0; length = nchunks+1)); # contiguous chunk boundaries of 1:Nw0
+    partials = [zeros(ComplexF64, 2*Nf+1, 2*Nf+1, 2*(2*Nf)) for _ = 1:nchunks];
+    Threads.@threads for c = 1:nchunks
+        jacloc = partials[c];                            # private accumulator (alias, mutated in place)
+        Glwmntemp = zeros(ComplexF64, N8, N8); Glwmn = zeros(ComplexF64, N8, N8);
+        VviGrwmn  = zeros(ComplexF64, N8, N8); VviGlwmn = zeros(ComplexF64, N8, N8);
+        t1 = zeros(ComplexF64, N8, N8); t2 = zeros(ComplexF64, N8, N8); t3 = zeros(ComplexF64, N8, N8);
+        for gh = (cb[c]+1):cb[c+1]
+            Grwmn = Keldyshsetup_Floquetn_ext.Grwmnf(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR);
+            Gawmn = conj(transpose(Grwmn));
+            Sigl = Keldyshsetup_Floquetn_ext.Siglf(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Sigl_s, JL, KL, JR, KR);
+            mul!(Glwmntemp, Grwmn, Sigl); mul!(Glwmn, Glwmntemp, Gawmn);               # G< = Gr Sig< Ga
+            mul!(VviGrwmn, -Vvi, Grwmn); mul!(VviGlwmn, -Vvi, Glwmn);                  # -Vi.Gr , -Vi.G<
+            for ij = 1:(4*Nf)
+                mul!(t1, Marsp[ij], Gawmn);  mul!(t3, VviGlwmn, t1)        # -Vi.G< (dV.Ga)
+                mul!(t2, Marsp[ij], Glwmn);  mul!(t3, VviGrwmn, t2, 1, 1)  # + -Vi.Gr (dV.G<)
+                mul!(t3, Miarsp[ij], Glwmn, 1, 1)                         # + (-dVi).G<
+
+                # Nambu(x)spin trace (4 diag components) per Floquet pair: lead L (LL) minus lead R (RR)
+                for jk = 1:(2*Nf+1)
+                    for kl = 1:(2*Nf+1)
+                        @views jacloc[jk,kl,ij] += (t3[4*jk-3,4*kl-3]+t3[4*jk-2,4*kl-2]+t3[4*jk-1,4*kl-1]+t3[4*jk,4*kl]) - (t3[off+4*jk-3,off+4*kl-3]+t3[off+4*jk-2,off+4*kl-2]+t3[off+4*jk-1,off+4*kl-1]+t3[off+4*jk,off+4*kl]);
+                    end
+                end
+            end
+        end
+    end
+    jacIif = sum(partials);                              # reduce the per-chunk partials
 
     jacIif .*= deltaw0 / (2*pi); # complete the (1/2pi) frequency integral
 
@@ -1766,6 +1814,7 @@ function IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, 
     Mar = Mar .* (abs.(Mar) .> 0.5*T*deltaV); Miar = -Miar .* (abs.(Miar) .> 0.5*T*deltaV); # drop numerical-zero entries; fold the leading minus of ∂(-VᵢG<)/∂x into Miar
     
     Marsp = [sparse(@view Mar[:,:,ij]) for ij = 1:4*Nf]; Miarsp = [sparse(@view Miar[:,:,ij]) for ij = 1:4*Nf]; #dV/dx is a single (sparse) Floquet off-diagonal
+    #= ---- OLD: serial over Nw0 (frequency), threaded over the 4Nf columns. Kept for reference. ----
     Glwmn_w2 = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigrwmn = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vviglwmn = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
     tls = TaskLocalValue{Vector{Matrix{ComplexF64}}}( () ->
                      begin
@@ -1773,37 +1822,54 @@ function IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, 
                          [t1, t2, t3]
                      end)
     for gh = 1:Nw0
-        if gh%10 == 0
-            println(" (jac) ev iter = ",iterprint)
-            println(" (jac) w iter/Nw0 = $(gh)/$(Nw0)")
-        end
-        
-        # Bare lead propagators at this frequency (the O(𝒯²) scheme expands G< in powers of T):
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)            # bare retarded gr
-        gawmn = conj(transpose( grwmn ));                                                        # bare advanced ga = (gr)†
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)            # bare lesser g<
-        Glwmn_w2 .= Keldyshsetup_Floquetn_ext.Glesser_Floquet_T2(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn, gawmn, glwmn); # O(𝒯²) lesser GF
-        mul!(Vvigrwmn, -Vvi, grwmn); mul!(Vviglwmn, -Vvi, glwmn);                                 # vertex prefactors -Vᵢ·gr and -Vᵢ·g<
-
-        # ∂(current)/∂x_ij at O(𝒯²): ∂G<₍₂₎ = gr·M_ij·g< + g<·M_ij·ga (bare propagators), so
-        #   t3 = -Vᵢ·gr·M·g< + (-Vᵢ·g<)·M·ga + (-∂Vᵢ/∂x)·G<₍₂₎.
-        Threads.@threads for ij = 1:(4*Nf) #variable (for derivative in Jacobian) index
+        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
+        gawmn = conj(transpose( grwmn ));
+        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
+        Glwmn_w2 .= Keldyshsetup_Floquetn_ext.Glesser_Floquet_T2(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn, gawmn, glwmn);
+        mul!(Vvigrwmn, -Vvi, grwmn); mul!(Vviglwmn, -Vvi, glwmn);
+        Threads.@threads for ij = 1:(4*Nf)
             t1, t2, t3 = tls[]
-            mul!(t1, Marsp[ij], gawmn);  mul!(t3, Vviglwmn, t1) # -Vᵢ·g< · (∂V/∂x · ga); sparse ∂V/∂x first => O(N²)
-            mul!(t2, Marsp[ij], glwmn);  mul!(t3, Vvigrwmn, t2, 1, 1) # + -Vᵢ·gr · (∂V/∂x · g<)
-            mul!(t3, Miarsp[ij], Glwmn_w2, 1, 1) # + (-∂Vᵢ/∂x) · G<₍₂₎  (sparse, O(N²))
-
-            # Reduce the N×N derivative matrix t3 = ∂(current operator)/∂x_ij to the
-            # Floquet-mode-resolved current derivative: for each Floquet block (jk,kl) take
-            # the Nambu trace of the left-lead (LL) block minus the right-lead (RR) block,
-            # and accumulate the frequency integral on the fly (sum over gh).
+            mul!(t1, Marsp[ij], gawmn);  mul!(t3, Vviglwmn, t1)
+            mul!(t2, Marsp[ij], glwmn);  mul!(t3, Vvigrwmn, t2, 1, 1)
+            mul!(t3, Miarsp[ij], Glwmn_w2, 1, 1)
             for jk = 1:(2*Nf+1)
-                for kl = 1:(2*Nf+1)          # LL Nambu trace (rows/cols 1..2(2Nf+1))     minus RR block (offset 2(2Nf+1))
-                    @views jacIif[jk,kl,ij] += (t3[4*jk-3,4*kl-3]+t3[4*jk-2,4*kl-2]+t3[4*jk-1,4*kl-1]+t3[4*jk,4*kl]) - (t3[4*(2*Nf+1)+4*jk-3,4*(2*Nf+1)+4*kl-3]+t3[4*(2*Nf+1)+4*jk-2,4*(2*Nf+1)+4*kl-2]+t3[4*(2*Nf+1)+4*jk-1,4*(2*Nf+1)+4*kl-1]+t3[4*(2*Nf+1)+4*jk,4*(2*Nf+1)+4*kl]); #Trace in Nambu space for each Floquet mode (jk)
+                for kl = 1:(2*Nf+1)
+                    @views jacIif[jk,kl,ij] += (t3[4*jk-3,4*kl-3]+t3[4*jk-2,4*kl-2]+t3[4*jk-1,4*kl-1]+t3[4*jk,4*kl]) - (t3[4*(2*Nf+1)+4*jk-3,4*(2*Nf+1)+4*kl-3]+t3[4*(2*Nf+1)+4*jk-2,4*(2*Nf+1)+4*kl-2]+t3[4*(2*Nf+1)+4*jk-1,4*(2*Nf+1)+4*kl-1]+t3[4*(2*Nf+1)+4*jk,4*(2*Nf+1)+4*kl]);
                 end
             end
         end
     end
+    =#
+
+    # ---- NEW: thread over frequency CHUNKS (parallel width = up to Nw0). Private scratch + accumulator. ----
+    N8 = 8*(2*Nf+1);
+    nchunks = min(Nw0, max(Threads.nthreads(), 1));
+    cb = round.(Int, range(0, Nw0; length = nchunks+1));
+    partials = [zeros(ComplexF64, 2*Nf+1, 2*Nf+1, 2*(2*Nf)) for _ = 1:nchunks];
+    Threads.@threads for c = 1:nchunks
+        jacloc = partials[c];
+        Glwmn_w2 = zeros(ComplexF64, N8, N8); Vvigrwmn = zeros(ComplexF64, N8, N8); Vviglwmn = zeros(ComplexF64, N8, N8);
+        t1 = zeros(ComplexF64, N8, N8); t2 = zeros(ComplexF64, N8, N8); t3 = zeros(ComplexF64, N8, N8);
+        for gh = (cb[c]+1):cb[c+1]
+            # Bare lead propagators (the O(𝒯²) scheme expands G< in powers of T):
+            grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)            # bare retarded gr
+            gawmn = conj(transpose( grwmn ));                                                        # bare advanced ga = (gr)†
+            glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)            # bare lesser g<
+            Glwmn_w2 .= Keldyshsetup_Floquetn_ext.Glesser_Floquet_T2(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn, gawmn, glwmn); # O(𝒯²) lesser GF
+            mul!(Vvigrwmn, -Vvi, grwmn); mul!(Vviglwmn, -Vvi, glwmn);                                 # -Vᵢ·gr , -Vᵢ·g<
+            for ij = 1:(4*Nf) #variable (for derivative in Jacobian) index
+                mul!(t1, Marsp[ij], gawmn);  mul!(t3, Vviglwmn, t1) # -Vᵢ·g< · (∂V/∂x · ga)
+                mul!(t2, Marsp[ij], glwmn);  mul!(t3, Vvigrwmn, t2, 1, 1) # + -Vᵢ·gr · (∂V/∂x · g<)
+                mul!(t3, Miarsp[ij], Glwmn_w2, 1, 1) # + (-∂Vᵢ/∂x) · G<₍₂₎
+                for jk = 1:(2*Nf+1)
+                    for kl = 1:(2*Nf+1)
+                        @views jacloc[jk,kl,ij] += (t3[4*jk-3,4*kl-3]+t3[4*jk-2,4*kl-2]+t3[4*jk-1,4*kl-1]+t3[4*jk,4*kl]) - (t3[4*(2*Nf+1)+4*jk-3,4*(2*Nf+1)+4*kl-3]+t3[4*(2*Nf+1)+4*jk-2,4*(2*Nf+1)+4*kl-2]+t3[4*(2*Nf+1)+4*jk-1,4*(2*Nf+1)+4*kl-1]+t3[4*(2*Nf+1)+4*jk,4*(2*Nf+1)+4*kl]);
+                    end
+                end
+            end
+        end
+    end
+    jacIif = sum(partials);
 
     jacIif .*= deltaw0 / (2*pi); # complete the (1/2π)∫dω frequency integral
 
@@ -1921,6 +1987,7 @@ function IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, 
     # hopping self-energy Vv (=Σ), and r/l/a denote gr/g</ga, so e.g. gr_s_gl = gr·Σ·g< and
     # Vvigr_s_gr = -Vᵢ·gr·Σ·gr. These chains are the building blocks of the O(𝒯⁴) lesser-GF
     # expansion and its derivative; they are formed once per frequency below.
+    #= ---- OLD: serial over Nw0 (frequency), threaded over the 4Nf columns. Kept for reference. ----
     Glwmn_w4 = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
     Vvigr = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigl = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigr_s_gr = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigr_s_gl = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigl_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
     Vvigr_s_gr_s_gr = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigr_s_gr_s_gl = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigr_s_gl_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigl_s_ga_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
@@ -1971,6 +2038,61 @@ function IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, 
             end
         end
     end
+    =#
+
+    # ---- NEW: thread over frequency CHUNKS (parallel width = up to Nw0). Private chains/scratch + accumulator. ----
+    nchunks = min(Nw0, max(Threads.nthreads(), 1));
+    cb = round.(Int, range(0, Nw0; length = nchunks+1));
+    partials = [zeros(ComplexF64, 2*Nf+1, 2*Nf+1, 2*(2*Nf)) for _ = 1:nchunks];
+    Threads.@threads for c = 1:nchunks
+        jacloc = partials[c];
+        Glwmn_w4 = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
+        Vvigr = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigl = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigr_s_gr = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigr_s_gl = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigl_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
+        Vvigr_s_gr_s_gr = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigr_s_gr_s_gl = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigr_s_gl_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); Vvigl_s_ga_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
+        gr_s_gr_s_gl = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); gr_s_gr_s_gr = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); gr_s_gr = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); gr_s_gl = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
+        gr_s_gl_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); gl_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
+        ga_s_ga_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); gl_s_ga_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1)); ga_s_ga = zeros(ComplexF64, 8*(2*Nf+1),8*(2*Nf+1));
+    
+        for gh = (cb[c]+1):cb[c+1]
+        
+            # Bare propagators at this frequency:
+            grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)            # bare retarded gr
+            gawmn = conj(transpose( grwmn ));                                                        # bare advanced ga
+            glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[gh], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)            # bare lesser g<
+            Glwmn_w4 .= Keldyshsetup_Floquetn_ext.Glesser_Floquet_T4(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn, gawmn, glwmn); # O(𝒯⁴) lesser GF
+            # Chained products gr·Σ·g<, gr·Σ·gr·Σ·g<, … (suffix = factor sequence) entering G<₍₄₎:
+            gr_s_gr = grwmn*Vv*grwmn; gr_s_gl = grwmn*Vv*glwmn; gr_s_gr_s_gl = gr_s_gr*Vv*glwmn; gr_s_gr_s_gr = gr_s_gr*Vv*grwmn;
+            gr_s_gl_s_ga = gr_s_gl*Vv*gawmn; gl_s_ga = glwmn*Vv*gawmn;
+            gl_s_ga_s_ga = gl_s_ga*Vv*gawmn; ga_s_ga = gawmn*Vv*gawmn;
+            ga_s_ga_s_ga = ga_s_ga*Vv*gawmn;
+            # Pre-multiply each chain by the vertex -Vᵢ (done once per ω, reused for every column ij):
+            mul!(Vvigr, -Vvi, grwmn); mul!(Vvigl, -Vvi, glwmn); mul!(Vvigr_s_gr, -Vvi, gr_s_gr); mul!(Vvigr_s_gl, -Vvi, gr_s_gl); mul!(Vvigl_s_ga, -Vvi, gl_s_ga);
+            mul!(Vvigr_s_gr_s_gr, -Vvi, gr_s_gr_s_gr); mul!(Vvigr_s_gr_s_gl, -Vvi, gr_s_gr_s_gl); mul!(Vvigr_s_gl_s_ga, -Vvi, gr_s_gl_s_ga); mul!(Vvigl_s_ga_s_ga, -Vvi, gl_s_ga_s_ga);
+
+            # ∂G<₍₄₎/∂x_ij by the product rule: in each chain of G<₍₄₎, replace exactly one Σ (=Vv) by
+            # M_ij = ∂V/∂x_ij. Each line below collects the single-Σ replacements at one expansion order;
+            # the final term is (-∂Vᵢ/∂x)·G<₍₄₎ (the vertex derivative, with its minus folded into Miar).
+            for ij = 1:(4*Nf) #variable (for derivative in Jacobian) index
+                t3 = Vvigr*Mar[:,:,ij]*glwmn + Vvigl*Mar[:,:,ij]*gawmn + # O(𝒯²) part: replace the single Σ
+                     Vvigr*Mar[:,:,ij]*gr_s_gr_s_gl + Vvigr_s_gr*Mar[:,:,ij]*gr_s_gl + Vvigr_s_gr_s_gr*Mar[:,:,ij]*glwmn + # O(𝒯⁴): Σ in the gr-gr-g< chain
+                     Vvigr*Mar[:,:,ij]*gr_s_gl_s_ga + Vvigr_s_gr*Mar[:,:,ij]*gl_s_ga + Vvigr_s_gr_s_gl*Mar[:,:,ij]*gawmn + # Σ in the gr-g<-ga chain
+                     Vvigr*Mar[:,:,ij]*gl_s_ga_s_ga + Vvigr_s_gl*Mar[:,:,ij]*ga_s_ga + Vvigr_s_gl_s_ga*Mar[:,:,ij]*gawmn + # Σ in the g<-ga-ga chain
+                     Vvigl*Mar[:,:,ij]*ga_s_ga_s_ga + Vvigl_s_ga*Mar[:,:,ij]*ga_s_ga + Vvigl_s_ga_s_ga*Mar[:,:,ij]*gawmn + # Σ in the ga-ga-ga chain
+                     Miar[:,:,ij]*Glwmn_w4; # vertex-derivative term: (-∂Vᵢ/∂x)·G<₍₄₎  (O(𝒯²) part included in Glwmn_w4)
+
+                # Reduce the N×N derivative matrix t3 = ∂(current operator)/∂x_ij to the
+                # Floquet-mode-resolved current derivative: for each Floquet block (jk,kl) take
+                # the Nambu trace of the left-lead (LL) block minus the right-lead (RR) block,
+                # and accumulate the frequency integral on the fly (sum over gh).
+                for jk = 1:(2*Nf+1)
+                    for kl = 1:(2*Nf+1)          # LL Nambu trace (rows/cols 1..2(2Nf+1))     minus RR block (offset 2(2Nf+1))
+                        @views jacloc[jk,kl,ij] += (t3[4*jk-3,4*kl-3]+t3[4*jk-2,4*kl-2]+t3[4*jk-1,4*kl-1]+t3[4*jk,4*kl]) - (t3[4*(2*Nf+1)+4*jk-3,4*(2*Nf+1)+4*kl-3]+t3[4*(2*Nf+1)+4*jk-2,4*(2*Nf+1)+4*kl-2]+t3[4*(2*Nf+1)+4*jk-1,4*(2*Nf+1)+4*kl-1]+t3[4*(2*Nf+1)+4*jk,4*(2*Nf+1)+4*kl]); #Trace in Nambu space for each Floquet mode (jk)
+                    end
+                end
+            end
+        end
+    end
+    jacIif = sum(partials);
 
     jacIif .*= deltaw0 / (2*pi); # complete the (1/2π)∫dω frequency integral
 
