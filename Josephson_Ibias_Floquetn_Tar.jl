@@ -26,7 +26,6 @@ Nev = 110; evar = range(0.38, 3.5, Nev);
 tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = range(0, tmax, Nt0);
   
 #Lesser self energy
-Sigl_s = 1;
   
 #naming
 str2 = "n_Tar_Nf30_delta1_zeta5_Gam1e-2_V0p38_3p5_110"
@@ -67,14 +66,14 @@ for gh = 1:nT
             ftols = 5e-17;
         end
 
-        fvalue = norm(Keldyshsetup_Floquetn.IbiasResidual_Tfull(Vipseed, war0, Omega, Nf, zeta, delta, Tar[gh], Gamma, Sigl_s, hi));
+        fvalue = norm(Keldyshsetup_Floquetn.IbiasResidual_Tfull(Vipseed, war0, Omega, Nf, zeta, delta, Tar[gh], Gamma, hi));
         if fvalue < ftols
             Vipsol[gh,hi,:] = Vipseed;
             residualarr[gh,hi] = fvalue;
         else     
             t0 = time()
-            # res = nlsolve(x -> Keldyshsetup_Floquetn.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, Tar[gh], Gamma, Sigl_s, gh), Vipseed, show_trace=true, ftol = ftols; xtol = xtols, iterations = itermax);
-            res = nlsolve(x -> Keldyshsetup_Floquetn.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, Tar[gh], Gamma, Sigl_s, hi), x -> Keldyshsetup_Floquetn.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, Tar[gh], Gamma, Sigl_s, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
+            # res = nlsolve(x -> Keldyshsetup_Floquetn.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, Tar[gh], Gamma, gh), Vipseed, show_trace=true, ftol = ftols; xtol = xtols, iterations = itermax);
+            res = nlsolve(x -> Keldyshsetup_Floquetn.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, Tar[gh], Gamma, hi), x -> Keldyshsetup_Floquetn.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, Tar[gh], Gamma, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
             t1 = time()
             println("time = ",t1-t0)
             Vipsol[gh,hi,:] = res.zero;
@@ -87,7 +86,7 @@ for gh = 1:nT
             VipI[2*kl] = Vipsol[hi,kl] + im*Vipsol[hi,(2*Nf)+kl];
         end
 
-        If[gh,hi,:,:] = Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, Tar[gh], Gamma, VipI, Sigl_s, hi);
+        If[gh,hi,:,:] = Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, Tar[gh], Gamma, VipI, hi);
         for kl = -Nf:Nf
             for lm = -Nf:Nf
                 Ifa[hi,-(kl-lm)+(2*Nf+1)] = Ifa[gh,hi,-(kl-lm)+(2*Nf+1)] + If[gh,hi,-kl+Nf+1,-lm+Nf+1];

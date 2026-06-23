@@ -37,7 +37,6 @@ Nev = 90; evar = delta*range(0.36, 3.2, Nev);
 tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = range(0, tmax, Nt0);
 
 #Lesser self energy
-Sigl_s = 1;
 
 #Scheme (only ws=0 supported in the 4x4 ext module)
 ws = 0;
@@ -48,7 +47,7 @@ str2 = "n_" * str1;
 
 ## ----------Self-consistent solve----------
 Vipsolseed = nothing; Nevseed = nothing;
-Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Sigl_s, JL, KL, JR, KR, Vipsolseed, Nevseed)
+Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipsolseed, Nevseed)
 
 dIdv = zeros(Float64, Nev);
 for hi = 1:Nev-1

@@ -22,7 +22,6 @@ Nev = 300; evar = 1*range(0.2, 2.4, Nev);
 str2 = "Vbiasdirect_Gamma1em3_delta1_zeta10_V260_0p2_2p1";
 
 #Lesser self energy
-Sigl_s = 1;
 
 War0 = 2*pi .* [1+0.6*im 0 0.3-0.5*im];
 War17 = 2*pi .* [0.25 0 0.3 0 0.5 0 1 0 -0.2 0 -0.1 0 -0.08 0 -0.06];  #+7, +6, +5, +4, +3, +2, +1, 0, -1, -2, -3, -4, -5, -6, -7
