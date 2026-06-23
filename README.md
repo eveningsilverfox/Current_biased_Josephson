@@ -41,8 +41,7 @@ A self-contained derivation of every equation solved by the code is in
 
 ## Requirements
 
-- **Julia** (run interactively, e.g. from the REPL or VS Code). On Linux it can
-  be installed with the official `juliaup` installer:
+- **Julia** On Linux it can be installed with the official `juliaup` installer:
 
   ```sh
   curl -fsSL https://install.julialang.org | sh
@@ -118,7 +117,8 @@ re-loading a cached result requires matching them.
 basis `(c↑, c↓, c↑†, c↓†)`, so that **classical-spin (magnetic) impurities** can
 be placed on each lead via a local Dyson dressing of the surface Green's
 function. Each lead carries its own exchange and potential scattering terms, passed 
-as `JL, KL, JR, KR`. he corresponding derivation is Section 10 of the technical notes in `docs/`.
+as `JL, KL, JR, KR`. The corresponding derivation is present in Section 10 of the technical 
+notes in `docs/`.
 
 ## Citation
 
