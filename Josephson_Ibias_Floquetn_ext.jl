@@ -42,7 +42,9 @@ tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = rang
 ws = 0;
 
 #naming
-str1 = "Nf22_Ibias_ext_delta1_zeta5_T0p6_Gam1e-2_V0p36_3p0_90";
+fnum(x) = x isa Integer ? string(x) : replace(string(round(x, sigdigits=4)), "." => "p");   # numeric value -> filename token ('.' -> 'p')
+fvec(v) = join(fnum.(v), "-");                                                               # vector value -> components joined by '-'
+str1 = "Nf$(Nf)_Ibias_ext_delta$(fnum(delta))_zeta$(fnum(zeta))_T$(fnum(T))_Gam$(fnum(Gamma))_V$(fnum(first(evar)))_$(fnum(last(evar)))_$(Nev)_JL$(fvec(JL))_KL$(fnum(KL))_JR$(fvec(JR))_KR$(fnum(KR))";
 str2 = "n_" * str1;
 
 ## ----------Self-consistent solve----------

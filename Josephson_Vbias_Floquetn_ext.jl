@@ -45,7 +45,9 @@ Nev = 30; evar = delta*range(0.05, 3.25, Nev);
 ws = 0;
 
 #naming
-str1 = "Nf30_Vbias_ext_delta1_zeta20_T0p99zeta_Gam2e-2_V0p05_2p0_30";
+fnum(x) = x isa Integer ? string(x) : replace(string(round(x, sigdigits=4)), "." => "p");   # numeric value -> filename token ('.' -> 'p')
+fvec(v) = join(fnum.(v), "-");                                                               # vector value -> components joined by '-'
+str1 = "Nf$(Nf)_Vbias_ext_delta$(fnum(delta))_zeta$(fnum(zeta))_T$(fnum(T/zeta))zeta_Gam$(fnum(Gamma))_V$(fnum(first(evar)))_$(fnum(last(evar)))_$(Nev)_JL$(fvec(JL))_KL$(fnum(KL))_JR$(fvec(JR))_KR$(fnum(KR))";
 str2 = "n_" * str1;
 
 ## ----------Setup----------

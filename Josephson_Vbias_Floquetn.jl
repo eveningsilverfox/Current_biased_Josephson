@@ -27,7 +27,8 @@ Nev = 30; evar = delta*range(0.05, 2, Nev);
 ws = 0; #0:exact, 2:w2, 4:w4
 
 #naming
-str1 = "Nf30_Vbias_delta1_zeta20_T0p2zeta_Gam1e-2_V0p05_3p0_100";
+fnum(x) = x isa Integer ? string(x) : replace(string(round(x, sigdigits=4)), "." => "p");   # numeric value -> filename token ('.' -> 'p')
+str1 = "Nf$(Nf)_Vbias_delta$(fnum(delta))_zeta$(fnum(zeta))_T$(fnum(T/zeta))zeta_Gam$(fnum(Gamma))_V$(fnum(first(evar)))_$(fnum(last(evar)))_$(Nev)";
 if ws == 8
     str2 = "n_w8_" * str1;
 elseif ws == 6

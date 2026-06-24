@@ -20,7 +20,8 @@ dw1 = Gamma/5; wmax = 1*zeta; Nw1 = trunc(Int, 2*wmax/dw1); war1 = range(-wmax, 
 Nphi = 50; phiar = 2*pi*range(0.0, 1.0, Nphi);
 
 #naming
-str1 = "delta1_zeta5_Gam1e-2";
+fnum(x) = x isa Integer ? string(x) : replace(string(round(x, sigdigits=4)), "." => "p");   # numeric value -> filename token ('.' -> 'p')
+str1 = "delta$(fnum(delta))_zeta$(fnum(zeta))_Gam$(fnum(Gamma))";
 
 ## ----------Current----------
 
