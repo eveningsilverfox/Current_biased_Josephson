@@ -29,7 +29,8 @@ tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = rang
 ws = 0; #0:exact, 2:w2, 4:w4
 
 #naming
-str1 = "Nf22_delta1_zeta5_T0p6_Gam1e-2_V0p36_3p0_90";
+fnum(x) = x isa Integer ? string(x) : replace(string(round(x, sigdigits=4)), "." => "p");   # numeric value -> filename token ('.' -> 'p')
+str1 = "Nf$(Nf)_delta$(fnum(delta))_zeta$(fnum(zeta))_T$(fnum(T))_Gam$(fnum(Gamma))_V$(fnum(first(evar)))_$(fnum(last(evar)))_$(Nev)";
 if ws == 8
     str2 = "n_w8_" * str1;
 elseif ws == 6

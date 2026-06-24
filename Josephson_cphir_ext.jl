@@ -33,7 +33,9 @@ JR = [0.0, 0.0, 0.0]; KR = 0.0;
 Nphi = 50; phiar = 2*pi*range(0.0, 1.0, Nphi);
 
 #naming
-str1 = "ext_delta1_zeta20_Gam1e-2";
+fnum(x) = x isa Integer ? string(x) : replace(string(round(x, sigdigits=4)), "." => "p");   # numeric value -> filename token ('.' -> 'p')
+fvec(v) = join(fnum.(v), "-");                                                               # vector value -> components joined by '-'
+str1 = "ext_delta$(fnum(delta))_zeta$(fnum(zeta))_Gam$(fnum(Gamma))_JL$(fvec(JL))_KL$(fnum(KL))_JR$(fvec(JR))_KR$(fnum(KR))";
 
 ## ----------Current----------
 cphi2Tar = zeros(Float64, nT,Nphi); cphi4Tar = zeros(Float64, nT,Nphi); cphifTar = zeros(Float64, nT,Nphi);
