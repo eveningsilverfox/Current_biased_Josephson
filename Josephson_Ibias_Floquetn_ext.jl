@@ -39,7 +39,7 @@ println("YSR energies E/Δ  | L lead: analytical=$(round.(EYSR_La./delta, digits
 println("                  | R lead: analytical=$(round.(EYSR_Ra./delta, digits=5)) numerical=$(round.(EYSR_Rn./delta, digits=5))")
 
 #voltage
-Nev = 128; evar = delta*range(0.24, 3.2, Nev);
+Nev = 140; evar = delta*range(0.24, 3.2, Nev);
 
 #time (for phase reconstruction)
 tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = range(0, tmax, Nt0);
