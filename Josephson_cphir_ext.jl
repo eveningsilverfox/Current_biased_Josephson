@@ -26,8 +26,8 @@ dw1 = Gamma/5; wmax = 1*zeta; Nw1 = trunc(Int, 2*wmax/dw1); war1 = range(-wmax, 
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 I(phi))
 #  collinear YSR:        JL=JR=[0,0,Jz]
 #  non-collinear/diode:  rotate JR vs JL, e.g. JR=Jz*[sin(th),0,cos(th)]
-JL = [0.0, 0.0, 0.0]; KL = 0.0;
-JR = [0.0, 0.0, 0.0]; KR = 0.0;
+JL = [0.0, 0.0, 4.0]; KL = 0.0;
+JR = [0.0, 0.0, 4.0]; KR = 2.0;
 
 #Phase
 Nphi = 50; phiar = 2*pi*range(0.0, 1.0, Nphi);
@@ -56,15 +56,14 @@ for gh = 1:nT
 end
 
 ## ----------Plots----------
-p3 = scatter(Tar ./ zeta, 2 .* (Tar ./ zeta) .^ 2, label=L"an. \mathcal{T}^2", mc=:black, ms=6, ma=1, framestyle = :box)
-plot!(Tar ./ zeta, IcfTar .* RNTar, label=L"ex. \mathcal{T}^\infty", lc=:gray, lw=1.5, framestyle = :box)
+p3 = plot(Tar ./ zeta, IcfTar .* RNTar, lc=:gray, lw=1.5, framestyle = :box)
 xlabel!(L"T"); ylabel!(L"I_c")
-plot!(legend=:bottomleft, legendfontsize=14, titlefontsize=20, tickfontsize=17, guidefontsize = 17)
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17)
 display(p3)
 savefig(plot!(p3, dpi=450), "cphi_" * str1 * ".png")
 
-p5 = plot(Tar ./ zeta, RNTar, label=L"R_N", lc=:blue, lw=1.5, framestyle = :box)
+p5 = plot(Tar ./ zeta, RNTar, lc=:blue, lw=1.5, framestyle = :box)
 xlabel!(L"T/\zeta"); ylabel!(L"R_N")
-plot!(legendfontsize=14, titlefontsize=20, tickfontsize=17, guidefontsize = 20, legend=:topright)
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 20, legend=:topright)
 display(p5)
 savefig(plot!(p5, dpi=450), "RN_" * str1 * ".png")
