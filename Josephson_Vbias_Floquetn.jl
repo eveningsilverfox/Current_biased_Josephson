@@ -20,6 +20,7 @@ dw0 = minimum([Gamma/5, 0.01]);
 
 #voltage
 Nev = 30; evar = delta*range(0.05, 2, Nev);
+# Nev1 = 30; evar1 = delta*range(0.05, 2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 
 #Lesser self energy
 
@@ -55,9 +56,9 @@ for hi = 1:Nev
     println("evct/Nev = $(hi)/$(Nev)")
  
     ev = evar[hi]; Omega = ev;
-    Nw0 = trunc(Int, Omega/dw0); 
+    Nw0 = trunc(Int, abs(Omega)/dw0); 
     # war0 = range(0, (Nw0-1)*Omega/Nw0, Nw0);
-    war0 = -0.5*Omega .+ range(0, (Nw0-1)*Omega/Nw0, Nw0);
+    war0 = -0.5*abs(Omega) .+ range(0, (Nw0-1)*abs(Omega)/Nw0, Nw0);
 
     if ws == 8 
         If[hi,:,:] = Keldyshsetup_Floquetn.current_Floquet_T8(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, hi);

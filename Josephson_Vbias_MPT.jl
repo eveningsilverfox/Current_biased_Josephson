@@ -17,6 +17,7 @@ dw1 = Gamma/5; Nw1 = trunc(Int, 2*zeta/dw1); war1 = range(-zeta, zeta, Nw1);
 
 #voltage
 Nev = 300; evar = 1*range(0.2, 2.4, Nev);
+# Nev1 = 300; evar1 = 1*range(0.2, 2.4, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 
 #naming
 str2 = "Vbiasdirect_Gamma1em3_delta1_zeta10_V260_0p2_2p1";

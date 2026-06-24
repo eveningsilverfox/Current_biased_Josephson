@@ -34,7 +34,7 @@ BLAS.set_num_threads(1) # Avoid contention with threaded loop. Run with julia -t
 #    SINGLE thread (BLAS.set_num_threads(1) above) and hand the ENTIRE thread budget to the
 #    for loop:  nthreads(Julia) x 1 = nthreads, one matrix per thread, no oversubscription.
 # 2. Of the two candidate loops to parallelize -- the Floquet-mode loop (2Nf+1 modes, or the
-#    4Nf Jacobian derivative columns) and the frequency-grid loop (Nw0 = Omega/dw0 points) --
+#    4Nf Jacobian derivative columns) and the frequency-grid loop (Nw0 = abs(Omega)/dw0 points) --
 #    the number of Floquet modes (tens) is MUCH SMALLER than the number of frequency-grid
 #    points (hundreds to thousands). So we put the Threads.@threads parallelism on the
 #    FREQUENCY loop (chunked, see IbiasJacobian_Tfull / current_Floquet_Tfull): it exposes
@@ -264,9 +264,9 @@ function current_Vbias_Floquet_Tfull(war1, ev, zeta, delta, T, Gamma)
 
     Nf = 20; Omega = ev; delta1 = 0;
     
-    Nw0 = trunc(Int, Omega/deltaw1); 
+    Nw0 = trunc(Int, abs(Omega)/deltaw1); 
     # war0 = range(0, (Nw0-1)*Omega/Nw0, Nw0);
-    war0 = -0.5*Omega .+ range(0, (Nw0-1)*Omega/Nw0, Nw0);
+    war0 = -0.5*abs(Omega) .+ range(0, (Nw0-1)*abs(Omega)/Nw0, Nw0);
 
     VipI = zeros(ComplexF64, 4*Nf+1);
     VipI[2*Nf] = 1; 
@@ -2249,9 +2249,9 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Vipsolseed = nothing
         println("ev iter = ",hi)
         
         ev = evar[hi]; Omega = ev;
-        Nw0 = trunc(Int, Omega/dw0); 
+        Nw0 = trunc(Int, abs(Omega)/dw0); 
         # war0 = range(0, (Nw0-1)*Omega/Nw0, Nw0);
-        war0 = -0.5*Omega .+ range(0, (Nw0-1)*Omega/Nw0, Nw0);
+        war0 = -0.5*abs(Omega) .+ range(0, (Nw0-1)*abs(Omega)/Nw0, Nw0);
         
         if hi == Nev
             if Vipsolseed == nothing
@@ -2337,8 +2337,8 @@ function RN_full(Nf, dw0, zeta, delta, T, Gamma)
     #---RN---
     Omega = maximum([0.1, delta/3]); delta1 = 0;
     
-    Nw0 = trunc(Int, Omega/dw0); 
-    war0 = -0.5*Omega .+ range(0, (Nw0-1)*Omega/Nw0, Nw0);
+    Nw0 = trunc(Int, abs(Omega)/dw0); 
+    war0 = -0.5*abs(Omega) .+ range(0, (Nw0-1)*abs(Omega)/Nw0, Nw0);
     
     VipI = zeros(ComplexF64, 4*Nf+1);
     VipI[2*Nf] = 1; 

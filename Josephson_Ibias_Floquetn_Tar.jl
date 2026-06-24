@@ -21,6 +21,7 @@ nT = 5; Tar = range(0.05, 3.5, nT);
 
 #voltage
 Nev = 110; evar = range(0.38, 3.5, Nev);
+# Nev1 = 110; evar1 = range(0.38, 3.5, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 
 #time
 tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = range(0, tmax, Nt0);
@@ -51,8 +52,8 @@ for gh = 1:nT
         println("ev iter = ",hi)
     
         ev = evar[hi]; Omega = ev;
-        dw0 = 0.015; Nw0 = trunc(Int, Omega/dw0); 
-        war0 = range(0, Omega-dw0, Nw0);
+        dw0 = 0.015; Nw0 = trunc(Int, abs(Omega)/dw0); 
+        war0 = range(0, abs(Omega)-dw0, Nw0);
         
         if hi == Nev && gh == 1
             Vipseed[Nf] = 1;
