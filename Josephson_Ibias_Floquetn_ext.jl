@@ -30,6 +30,14 @@ dw0 = minimum([0.015, Gamma/2.0]);
 JL = [0.0, 0.0, 4.0]; KL = 0.0;
 JR = [0.0, 0.0, 4.0]; KR = 0.0;
 
+#YSR bound-state energies (in-gap poles of each lead's impurity-dressed surface GF)
+EYSR_La = Keldyshsetup_Floquetn_ext.ysr_energies_analytical(JL, KL, zeta, delta);
+EYSR_Ra = Keldyshsetup_Floquetn_ext.ysr_energies_analytical(JR, KR, zeta, delta);
+EYSR_Ln = Keldyshsetup_Floquetn_ext.ysr_energies_numerical(JL, KL, zeta, delta);
+EYSR_Rn = Keldyshsetup_Floquetn_ext.ysr_energies_numerical(JR, KR, zeta, delta);
+println("YSR energies E/Δ  | L lead: analytical=$(round.(EYSR_La./delta, digits=5)) numerical=$(round.(EYSR_Ln./delta, digits=5))")
+println("                  | R lead: analytical=$(round.(EYSR_Ra./delta, digits=5)) numerical=$(round.(EYSR_Rn./delta, digits=5))")
+
 #voltage
 Nev = 128; evar = delta*range(0.24, 3.2, Nev);
 
