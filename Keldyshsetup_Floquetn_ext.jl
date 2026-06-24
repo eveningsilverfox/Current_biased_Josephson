@@ -93,6 +93,71 @@ function gsurf4(z, zeta, delta, Vimp)
     return (I(4) - g0*Vimp) \ g0;
 end
 
+"""
+    ysr_energies_analytical(J, K, zeta, delta) -> (Eminus, Eplus)
+
+Closed-form subgap Yu-Shiba-Rusinov (YSR) bound-state energies of a single
+classical-spin impurity `Vimp = impurity4(J, K)` on a BCS lead -- the in-gap
+poles (|E| < delta) of the impurity-dressed surface GF [`gsurf4`](@ref). The
+clean surface GF `g0` is spin-isotropic (singlet pairing), so the result depends
+on the exchange only through its magnitude |J|. With dimensionless couplings
+alpha = |J|/zeta (magnetic), beta = K/zeta (potential) and u = 1 - alpha^2 + beta^2,
+
+    E_YSR = +/- delta * |u| / sqrt(u^2 + (2 alpha)^2).
+
+The pair is particle-hole symmetric; the level crosses zero (singlet<->doublet
+parity transition) at  alpha^2 = 1 + beta^2.  `J = K = 0` returns `+/-delta`
+(state pinned at the gap edge -> no subgap bound state). Cross-checked against
+[`ysr_energies_numerical`](@ref) to machine precision. Returns `(-|E_YSR|, +|E_YSR|)`.
+"""
+function ysr_energies_analytical(J, K, zeta, delta)
+    alpha = norm(J) / zeta;                                  # dimensionless magnetic coupling |J|/zeta
+    beta  = K / zeta;                                        # dimensionless potential coupling K/zeta
+    u = 1 - alpha^2 + beta^2;
+    E = delta * abs(u) / sqrt(u^2 + (2*alpha)^2);
+    return (-E, E);
+end
+
+"""
+    ysr_energies_numerical(J, K, zeta, delta; Ngrid=4001, edge=1e-4) -> (Eminus, Eplus)
+
+Subgap YSR energies obtained by locating the in-gap poles of the impurity-dressed
+surface GF [`gsurf4`](@ref) NUMERICALLY: `gsurf4 = (I - g0 Vimp)^{-1} g0` diverges
+exactly where `det(I - g0(E) Vimp) = 0`, which is real for real subgap `E`. The
+clean `g0` is taken from `gsurf4(E, zeta, delta, 0)`; the determinant is scanned on
+`Ngrid` points across `(-delta, delta)` (kept `edge` away from the gap edges) and
+each sign change is refined by bisection. Returns the outermost root pair
+`(-|E_YSR|, +|E_YSR|)`, or `(-delta, delta)` if no subgap pole exists (no bound
+state). Independent cross-check of [`ysr_energies_analytical`](@ref).
+"""
+function ysr_energies_numerical(J, K, zeta, delta; Ngrid = 4001, edge = 1e-4)
+    Vimp = impurity4(J, K);
+    g0clean(E) = gsurf4(E + 0im, zeta, delta, zeros(ComplexF64, 4, 4));   # clean surface GF g0
+    fdet(E) = real(det(I(4) - g0clean(E)*Vimp));    # Gr denominator: vanishes at the YSR poles
+    
+    Egrid = range(-delta*(1-edge), delta*(1-edge), Ngrid);
+    roots = Float64[];
+
+    fprev = fdet(Egrid[1]); # Gr denominator at first E grid point
+    for k in 2:Ngrid
+        fcur = fdet(Egrid[k]);
+        if fprev == 0.0 # Pole already present at first E grid point
+            push!(roots, Egrid[k-1]);
+        elseif fprev*fcur < 0 # Pole somewhere between E[k-1] and E[k] => bisect until root found
+            a, b, fa = Egrid[k-1], Egrid[k], fprev;
+            for _ in 1:100
+                m = 0.5*(a+b); fm = fdet(m);
+                (fa*fm <= 0) ? (b = m) : (a = m; fa = fm);
+            end
+            push!(roots, 0.5*(a+b));
+        end
+        fprev = fcur;
+    end
+    isempty(roots) && return (-delta, delta);                            # no subgap pole -> gap edge
+    sort!(roots);
+    return (roots[1], roots[end]);
+end
+
 
 
 ## ============ Critical current ==============

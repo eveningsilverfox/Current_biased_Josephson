@@ -56,6 +56,16 @@ for gh = 1:nT
 end
 
 ## ----------Plots----------
+tidx = 1:10:nT;
+p1 = plot(framestyle=:box);
+for gh in tidx
+    plot!(p1, phiar ./ pi, cphifTar[gh,:], lw=1.5, label=L"T/\zeta=%$(round(Tar[gh]/zeta, digits=2))");
+end
+xlabel!(L"\phi/\pi"); ylabel!(L"I(\phi)")
+plot!(legend=:outertopright, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(650,400))
+display(p1)
+savefig(plot!(p1, dpi=450), "Iphi_" * str1 * ".png")
+
 p3 = plot(Tar ./ zeta, IcfTar .* RNTar, lc=:gray, lw=1.5, framestyle = :box)
 xlabel!(L"T"); ylabel!(L"I_c")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17)
