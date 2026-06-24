@@ -39,8 +39,12 @@ println("YSR energies E/Δ  | L lead: analytical=$(round.(EYSR_La./delta, digits
 println("                  | R lead: analytical=$(round.(EYSR_Ra./delta, digits=5)) numerical=$(round.(EYSR_Rn./delta, digits=5))")
 
 #voltage
-Nev = 140; evar = delta*range(0.24, 3.2, Nev);
-# Nev1 = 140; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+signed_evar = false;
+if signed_evar
+    Nev1 = 140; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+else
+    Nev = 140; evar = delta*range(0.24, 3.2, Nev);
+end
 
 #time (for phase reconstruction)
 tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = range(0, tmax, Nt0);
@@ -58,13 +62,44 @@ str2 = "n_" * str1;
 
 ## ----------Self-consistent solve----------
 Vipsolseed = nothing; Nevseed = nothing;
-Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipsolseed, Nevseed)
+if signed_evar
+    # Bidirectional solve: split at the sign change and solve each branch
+    # independently, each starting from its largest-|V| point (where the simple
+    # seed works) so neither continuation has to cross the V=0 jump.
+    Nneg = count(<(0), evar);                          # = Nev1
+    evarneg = evar[1:Nneg]; evarpos = evar[Nneg+1:end];
+
+    # Negative branch: phisolve sweeps last->first, so pass it reversed to start
+    # at the most-negative (largest |V|), then undo the reverse.
+    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, nothing, nothing);
+    Ivn = reverse(Ivn); Vipn = reverse(Vipn, dims=1); resn = reverse(resn);
+
+    # Positive branch: identical to the unsigned run.
+    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipsolseed, Nevseed);
+
+    Iv = [Ivn; Ivp]; Vipsol = [Vipn; Vipp]; residualarr = [resn; resp];
+else
+    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipsolseed, Nevseed)
+end
 
 dIdv = zeros(Float64, Nev);
-for hi = 1:Nev-1
-    dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
+if signed_evar
+    Nneg = count(<(0), evar);
+    # dI/dV per branch (uniform step within each), then concatenate.
+    for hi = 1:Nneg-1
+        dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
+    end
+    dIdv[Nneg] = dIdv[Nneg-1] + (dIdv[Nneg-1]-dIdv[Nneg-2]);
+    for hi = Nneg+1:Nev-1
+        dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
+    end
+    dIdv[Nev] = dIdv[Nev-1] + (dIdv[Nev-1]-dIdv[Nev-2]);
+else
+    for hi = 1:Nev-1
+        dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
+    end
+    dIdv[Nev] = dIdv[Nev-1] + (dIdv[Nev-1]-dIdv[Nev-2])
 end
-dIdv[Nev] = dIdv[Nev-1] + (dIdv[Nev-1]-dIdv[Nev-2])
 
 # Lower/upper envelopes of the (hysteretic) IV curve
 Ivl = zeros(Float64, Nev); Ivu = zeros(Float64, Nev);
@@ -97,6 +132,11 @@ RN = Keldyshsetup_Floquetn_ext.RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, J
 # save("IV_Ibias_" * str2 * ".jld", "Iv", Iv);
 
 ## ----------Plots----------
+# YSR energy annotation (numerical, positive in-gap pole, in units of Δ)
+ysrLval = round(EYSR_Ln[2]/delta, digits=3); ysrRval = round(EYSR_Rn[2]/delta, digits=3);
+ysrann1 = text(latexstring("\\epsilon_{YSR,L}/\\Delta=$(ysrLval)"), 11, :left);
+ysrann2 = text(latexstring("\\epsilon_{YSR,R}/\\Delta=$(ysrRval)"), 11, :left);
+
 evct = 7;
 p0 = plot(tar0/(2*pi/(2*evar[evct])), Vt[evct,:]/(2*pi), framestyle = :box)
 xlims!(0,1)
@@ -114,6 +154,10 @@ vline!([2/4],linestyle=:dash,lc=:gray, label="")
 vline!([2/5],linestyle=:dash,lc=:gray, label="")
 xlabel!(L"eV/\Delta"); ylabel!(L"IeR_N/\Delta")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
+let xlo = minimum(evar/delta), xhi = maximum(evar/delta), ylo = minimum(Iv .* RN), yhi = maximum(Iv .* RN)
+    annotate!(p2, xlo + 0.03*(xhi-xlo), yhi - 0.07*(yhi-ylo), ysrann1)
+    annotate!(p2, xlo + 0.03*(xhi-xlo), yhi - 0.16*(yhi-ylo), ysrann2)
+end
 savefig(plot!(p2, dpi=450), "IV_Ibias_" * str2 * ".png")
 
 p2v = plot(evar/delta, dIdv .* RN, lc=:blue, lw=1.5, framestyle=:box, legend=:topleft)
@@ -124,4 +168,8 @@ vline!([2/4],linestyle=:dash,lc=:red, label="")
 vline!([2/5],linestyle=:dash,lc=:red, label="")
 xlabel!(L"eV/\Delta"); ylabel!(L"(dI/dV)eR_N/\Delta")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
+let xlo = minimum(evar/delta), xhi = maximum(evar/delta), ylo = minimum(dIdv .* RN), yhi = maximum(dIdv .* RN)
+    annotate!(p2v, xlo + 0.03*(xhi-xlo), yhi - 0.07*(yhi-ylo), ysrann1)
+    annotate!(p2v, xlo + 0.03*(xhi-xlo), yhi - 0.16*(yhi-ylo), ysrann2)
+end
 savefig(plot!(p2v, dpi=450), "dIdV_Ibias_" * str2 * ".png")

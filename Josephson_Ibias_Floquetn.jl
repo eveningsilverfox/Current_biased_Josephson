@@ -18,8 +18,12 @@ mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 5e-3;
 dw0 = minimum([0.015, Gamma/2.0]);
 
 #voltage
-Nev = 90; evar = delta*range(0.36, 3.0, Nev);
-# Nev1 = 90; evar1 = delta*range(0.36, 3.0, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+signed_evar = false;
+if signed_evar
+    Nev1 = 90; evar1 = delta*range(0.36, 3.0, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+else
+    Nev = 90; evar = delta*range(0.36, 3.0, Nev);
+end
 
 #time
 tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = range(0, tmax, Nt0);
@@ -47,13 +51,44 @@ end
 ## ----------Current----------
 # Vipsolseed = load("Vipsol_n_w2_Nf22_delta1_zeta5_T0p625_Gam1e-3_V0p38_3p0_80.jld")["Vipsol"]; Nevseed = 80;
 Vipsolseed = nothing; Nevseed = nothing;
-Iv, Vipsol, residualarr = Keldyshsetup_Floquetn.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Vipsolseed, Nevseed)
+if signed_evar
+    # Bidirectional solve: split at the sign change and solve each branch
+    # independently, each starting from its largest-|V| point (where the simple
+    # seed works) so neither continuation has to cross the V=0 jump.
+    Nneg = count(<(0), evar);                          # = Nev1
+    evarneg = evar[1:Nneg]; evarpos = evar[Nneg+1:end];
 
-dIdv = zeros(Float64, Nev); 
-for hi = 1:Nev-1
-    dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
+    # Negative branch: phisolve sweeps last->first, so pass it reversed to start
+    # at the most-negative (largest |V|), then undo the reverse.
+    Ivn, Vipn, resn = Keldyshsetup_Floquetn.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, nothing, nothing);
+    Ivn = reverse(Ivn); Vipn = reverse(Vipn, dims=1); resn = reverse(resn);
+
+    # Positive branch: identical to the unsigned run.
+    Ivp, Vipp, resp = Keldyshsetup_Floquetn.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, Vipsolseed, Nevseed);
+
+    Iv = [Ivn; Ivp]; Vipsol = [Vipn; Vipp]; residualarr = [resn; resp];
+else
+    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Vipsolseed, Nevseed)
 end
-dIdv[Nev] = dIdv[Nev-1] + (dIdv[Nev-1]-dIdv[Nev-2])
+
+dIdv = zeros(Float64, Nev);
+if signed_evar
+    Nneg = count(<(0), evar);
+    # dI/dV per branch (uniform step within each), then concatenate.
+    for hi = 1:Nneg-1
+        dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
+    end
+    dIdv[Nneg] = dIdv[Nneg-1] + (dIdv[Nneg-1]-dIdv[Nneg-2]);
+    for hi = Nneg+1:Nev-1
+        dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
+    end
+    dIdv[Nev] = dIdv[Nev-1] + (dIdv[Nev-1]-dIdv[Nev-2]);
+else
+    for hi = 1:Nev-1
+        dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
+    end
+    dIdv[Nev] = dIdv[Nev-1] + (dIdv[Nev-1]-dIdv[Nev-2])
+end
 
 # Lower and upper envelop of IV curve
 Ivl = zeros(Float64, Nev); Ivu = zeros(Float64, Nev); 

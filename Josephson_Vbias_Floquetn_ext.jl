@@ -102,6 +102,11 @@ dIdv[Nev] = dIdv[Nev-1] + (dIdv[Nev-1]-dIdv[Nev-2])
 RN = Keldyshsetup_Floquetn_ext.RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR);
 
 ## ----------Plots----------
+# YSR energy annotation (numerical, positive in-gap pole, in units of Δ)
+ysrLval = round(EYSR_Ln[2]/delta, digits=3); ysrRval = round(EYSR_Rn[2]/delta, digits=3);
+ysrann1 = text(latexstring("\\epsilon_{YSR,L}/\\Delta=$(ysrLval)"), 11, :left);
+ysrann2 = text(latexstring("\\epsilon_{YSR,R}/\\Delta=$(ysrRval)"), 11, :left);
+
 p2 = plot(evar/delta, Iv * RN, lc=:blue, label=L"I", lw=1.5, framestyle=:box)
 vline!([2/1],linestyle=:dash,lc=:red, label="")
 vline!([2/2],linestyle=:dash,lc=:red, label="")
@@ -110,6 +115,10 @@ vline!([2/4],linestyle=:dash,lc=:red, label="")
 vline!([2/5],linestyle=:dash,lc=:red, label="")
 xlabel!(L"eV/\Delta"); ylabel!(L"I(V) R_N")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
+let xlo = minimum(evar/delta), xhi = maximum(evar/delta), ylo = minimum(Iv * RN), yhi = maximum(Iv * RN)
+    annotate!(p2, xlo + 0.03*(xhi-xlo), yhi - 0.07*(yhi-ylo), ysrann1)
+    annotate!(p2, xlo + 0.03*(xhi-xlo), yhi - 0.16*(yhi-ylo), ysrann2)
+end
 savefig(plot!(p2, dpi=450), "IV_Vbias_" * str2 * ".png")
 
 p2v = plot(evar/delta, dIdv * RN, lc=:blue, label="", lw=1.5, framestyle=:box)
@@ -120,4 +129,8 @@ vline!([2/4],linestyle=:dash,lc=:red, label="")
 vline!([2/5],linestyle=:dash,lc=:red, label="")
 xlabel!(L"eV/\Delta"); ylabel!(L"(dI/dV) R_N")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
+let xlo = minimum(evar/delta), xhi = maximum(evar/delta), ylo = minimum(dIdv * RN), yhi = maximum(dIdv * RN)
+    annotate!(p2v, xlo + 0.03*(xhi-xlo), yhi - 0.07*(yhi-ylo), ysrann1)
+    annotate!(p2v, xlo + 0.03*(xhi-xlo), yhi - 0.16*(yhi-ylo), ysrann2)
+end
 savefig(plot!(p2v, dpi=450), "dIdV_Vbias_" * str2 * ".png")
