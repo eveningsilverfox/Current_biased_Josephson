@@ -17,7 +17,7 @@ using JLD
 # ---------------------------------------------------------------------------
 
 #size
-Nf = 22;
+Nf = 30;
 
 #energies
 mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 1e-2;
@@ -31,7 +31,7 @@ JL = [0.0, 0.0, 4.0]; KL = 0.0;
 JR = [0.0, 0.0, 4.0]; KR = 0.0;
 
 #voltage
-Nev = 90; evar = delta*range(0.36, 3.2, Nev);
+Nev = 128; evar = delta*range(0.24, 3.2, Nev);
 
 #time (for phase reconstruction)
 tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = range(0, tmax, Nt0);

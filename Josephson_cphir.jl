@@ -49,26 +49,15 @@ end
 
 ## ----------Plots----------
 
-p3 = scatter(Tar ./ zeta, 2 .* (Tar ./ zeta) .^ 2, label=L"an. \mathcal{T}^2", mc=:black, ms=6, ma=1, framestyle = :box)
-plot!(Tar ./ zeta, IcfTar .* RNTar, label=L"ex. \mathcal{T}^\infty", lc=:gray, lw=1.5, framestyle = :box)
-xlabel!(L"T")
-ylabel!(L"I_c")
-plot!(titlefontsize=20)
-plot!(legend=:bottomleft, legendfontsize=14, titlefontsize=20, tickfontsize=17, guidefontsize = 17)
+p3 = plot(Tar ./ zeta, IcfTar .* RNTar, lc=:gray, lw=1.5, framestyle = :box)
+xlabel!(L"T"); ylabel!(L"I_c")
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17)
 display(p3)
-savefig(plot!(p3, dpi=450), "cphi_" * str1 * ".png")  
+savefig(plot!(p3, dpi=450), "cphi_" * str1 * ".png")
 
-GN = (8*pi/(zeta)^2) #1 -> T. T set to 1.
-RN = 1/GN;
-
-GNanTar =  (4/pi) .* (Tar ./ zeta) .^ 2 ./ ( ( 1 .+ (Tar ./ zeta) .^ 2 ) .^ 2 );
-RNanTar = 1 ./ GNanTar;
-p5 = plot(Tar ./ zeta, RNTar, label=L"R_N", lc=:blue, lw=1.5, framestyle = :box)
-scatter!(Tar ./ zeta, RNanTar, label=L"an. R_N", mc=:black, ms=6, ma=1, framestyle = :box)
-xlabel!(L"T/\zeta")
-ylabel!(L"R_N")
-plot!(titlefontsize=20)
-plot!(legendfontsize=14, titlefontsize=20, tickfontsize=17, guidefontsize = 20, legend=:topright)
+p5 = plot(Tar ./ zeta, RNTar, lc=:blue, lw=1.5, framestyle = :box)
+xlabel!(L"T/\zeta"); ylabel!(L"R_N")
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 20, legend=:topright)
 display(p5)
-savefig(plot!(p5, dpi=450), "RN_" * str1 * ".png")  
+savefig(plot!(p5, dpi=450), "RN_" * str1 * ".png")
 
