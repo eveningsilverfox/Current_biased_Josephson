@@ -19,6 +19,7 @@ dw0 = minimum([0.015, Gamma/2.0]);
 
 #voltage
 Nev = 90; evar = delta*range(0.36, 3.0, Nev);
+# Nev1 = 90; evar1 = delta*range(0.36, 3.0, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 
 #time
 tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = range(0, tmax, Nt0);
@@ -109,8 +110,8 @@ if ws == 2
         println(hi)
 
         ev = evar[hi]; Omega = ev;
-        Nw0 = trunc(Int, Omega/dw0); 
-        war0 = range(0, Omega-dw0, Nw0);
+        Nw0 = trunc(Int, abs(Omega)/dw0); 
+        war0 = range(0, abs(Omega)-dw0, Nw0);
         VipI_2 = zeros(ComplexF64, 4*Nf+1);
         for kl = 1:2*Nf
             VipI_2[2*kl] = Vipsol2[hi,kl] + im*Vipsol2[hi,(2*Nf)+kl];

@@ -40,6 +40,7 @@ println("                  | R lead: analytical=$(round.(EYSR_Ra./delta, digits=
 
 #voltage
 Nev = 140; evar = delta*range(0.24, 3.2, Nev);
+# Nev1 = 140; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 
 #time (for phase reconstruction)
 tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = range(0, tmax, Nt0);
