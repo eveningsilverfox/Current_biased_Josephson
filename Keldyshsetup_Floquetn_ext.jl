@@ -2265,7 +2265,7 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vips
     Vipseed = zeros(Float64, 2*(2*Nf));
     residualarr = zeros(Float64, Nev);
 
-    ftols = 5e-13; xtols = 1e-13; itermax = 200;
+    ftols = 1e-12; xtols = 1e-10; itermax = 40;
 
     for hi = Nev:-1:1
         println("ev iter = ",hi)
@@ -2282,10 +2282,6 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vips
             end
         else
             Vipseed .= Vipsol[hi+1,:];
-        end
-
-        if hi>trunc(Int,0.6*Nev)
-            ftols = 5e-17;
         end
 
         if ws == 4
