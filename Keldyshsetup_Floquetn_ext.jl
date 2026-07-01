@@ -1017,6 +1017,34 @@ function grwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
 end
 
 """
+    grwmnf_sp(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR) -> SparseMatrixCSC{ComplexF64,Int}
+
+Sparse counterpart of [`grwmnf`](@ref). The bare (impurity-dressed) surface GF is
+block-diagonal -- one 4x4 Nambu(x)spin block per Floquet mode, with the two leads
+decoupled -- so it is built directly as a sparse block-diagonal matrix
+`blkdiag(grwmn_dL, grwmn_dR)` instead of allocating the dense 8(2Nf+1)-square array
+(and its two 4(2Nf+1)-square lead halves). Numerically identical to `grwmnf`; the
+sparsity is what lets the Dyson solve in [`Grwmnf`](@ref) skip the dense factorization
+once the hopping self-energy is also sparse.
+"""
+function grwmnf_sp(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
+    VL = Keldyshsetup_Floquetn_ext.impurity4(JL, KL);
+    VR = Keldyshsetup_Floquetn_ext.impurity4(JR, KR);
+
+    # Floquet mode ij sits at block position p = -ij+Nf+1, so p = 1..2Nf+1 <-> ij = Nf..-Nf.
+    # Build the L-lead blocks then the R-lead blocks in that (reversed) order and stack them
+    # block-diagonally == [grwmn_dL 0; 0 grwmn_dR].
+    blocksL = [sparse(Keldyshsetup_Floquetn_ext.gsurf4(ww + ij*Omega + im*Gamma, zeta, delta, VL)) for ij = Nf:-1:-Nf];
+    blocksR = [sparse(Keldyshsetup_Floquetn_ext.gsurf4(ww + ij*Omega + im*Gamma, zeta, delta, VR)) for ij = Nf:-1:-Nf];
+    # Without the ..., blockdiag(blocksL) would pass a single argument (the Vector), which blockdiag doesn't accept.
+    # blocksL = [A, B, C];  blocksR = [D, E];
+    # blockdiag(blocksL..., blocksR...) = blockdiag(A, B, C, D, E)
+    grwmn = blockdiag(blocksL..., blocksR...);
+
+    return grwmn
+end
+
+"""
     gawmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR) -> Matrix{ComplexF64}
 
 Bare ADVANCED lead Green's function, the -iGamma counterpart of [`grwmnf`](@ref)
@@ -1075,10 +1103,14 @@ with `gr` = [`grwmnf`](@ref) (4x4 Nambu(x)spin, per-lead impurity JL,KL,JR,KR) a
 `Sigr` = [`Vwmnf`](@ref)`(Vip)`. Solved as a linear system of size 8(2Nf+1).
 """
 function Grwmnf(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR)
-    grwmn = Keldyshsetup_Floquetn_ext.grwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
-    Vv = Keldyshsetup_Floquetn_ext.Vwmnf(Vip, Nf, T);
+    # grwmn = Keldyshsetup_Floquetn_ext.grwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
+    grwmn = Keldyshsetup_Floquetn_ext.grwmnf_sp(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);   # sparse block-diagonal bare GF
+    # Vv = Keldyshsetup_Floquetn_ext.Vwmnf(Vip, Nf, T);
+    Vv = Keldyshsetup_Floquetn_ext.Vwmnf_sp(Vip, Nf, T);   # sparse (banded, off-lead-diagonal) hopping self-energy
     Sigr = Vv;
-    Grwmn = (I((2*Nf+1)*2*4) - grwmn*Sigr) \ grwmn;
+    # A = I - grwmn*Sigr is now sparse; solve with a DENSE rhs (sparse\sparse is unsupported),
+    # i.e. sparse LU factorization + dense solve, giving the (dense) Grwmn expected downstream.
+    Grwmn = (I((2*Nf+1)*2*4) - grwmn*Sigr) \ Matrix(grwmn);
     return Grwmn
 end
 
@@ -1107,7 +1139,6 @@ hardcoded to `1` (formerly a function argument); `Sigl_s == 2` (alternative embe
 is not ported to the 4x4 basis.
 """
 function Siglf(ww, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR)
-    Sigl_s = 1;  # surface-embedding flag (hardcoded; formerly a function argument)
     N8 = 8*(2*Nf+1); off = 4*(2*Nf+1);
     Siglbath = zeros(ComplexF64, N8, N8);
     Siglsurface = zeros(ComplexF64, N8, N8);
@@ -1122,20 +1153,16 @@ function Siglf(ww, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR)
     Siglbath = [Siglbath_d zeros(size(Siglbath_d));
                 zeros(size(Siglbath_d)) Siglbath_d];
 
-    if Sigl_s == 1
-        ## Sig< from embedding the semi-infinite leads into the surface site (method 1)
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
+    ## Sig< from embedding the semi-infinite leads into the surface site (method 1)
+    glwmn = Keldyshsetup_Floquetn_ext.glwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
 
-        tauzs = kron([1 0; 0 -1], [1 0; 0 1]);   # tau_z (x) sigma_0 = diag(1, 1, -1, -1)
-        for ij = -Nf:Nf
-            p = -ij+Nf+1; blkL = 4*p-3:4*p; blkR = off+4*p-3:off+4*p;
-            Siglsurface[blkL, blkL] = zeta^2 .* ( tauzs * glwmn[blkL, blkL] * tauzs );
-            Siglsurface[blkR, blkR] = zeta^2 .* ( tauzs * glwmn[blkR, blkR] * tauzs );
-        end
-    elseif Sigl_s == 2
-        error("Siglf: Sigl_s==2 (alternative embedding) not yet ported to the 4x4 Nambu(x)spin basis");
+    tauzs = kron([1 0; 0 -1], [1 0; 0 1]);   # tau_z (x) sigma_0 = diag(1, 1, -1, -1)
+    for ij = -Nf:Nf
+        p = -ij+Nf+1; blkL = 4*p-3:4*p; blkR = off+4*p-3:off+4*p;
+        Siglsurface[blkL, blkL] = zeta^2 .* ( tauzs * glwmn[blkL, blkL] * tauzs );
+        Siglsurface[blkR, blkR] = zeta^2 .* ( tauzs * glwmn[blkR, blkR] * tauzs );
     end
-
+    
     Sigl = Siglbath + Siglsurface;
 
     return Sigl
@@ -1468,6 +1495,39 @@ function Vwmnf(Vip, Nf, T)
 end
 
 """
+    Vwmnf_sp(Vip, Nf, T) -> SparseMatrixCSC{ComplexF64,Int}
+
+Sparse counterpart of [`Vwmnf`](@ref). The hopping self-energy is off-diagonal in lead
+(`[0 Vwmn_d; Vwmn_d1 0]`), banded in Floquet (block `(ij,jk)` carries only the harmonics
+`Vip[±(ij-jk)]`, nonzero for odd `ij-jk` within the support of `Vip`), and each 4x4
+Nambu(x)spin block is diagonal (`kron(diag,sig0)`). So it is assembled directly from
+its (few) nonzero diagonal entries instead of the dense 8(2Nf+1)-square array, keeping
+allocations much smaller. Numerically identical to `Vwmnf`; keeping it sparse lets the Dyson LHS
+`I - grwmn*Sigr` in [`Grwmnf`](@ref) stay sparse for a banded (rather than dense) solve.
+"""
+function Vwmnf_sp(Vip, Nf, T)
+    Is = Int[]; Js = Int[]; Vs = ComplexF64[];
+    for ij = -Nf:Nf
+        for jk = -Nf:Nf
+            a = Vip[-(ij-jk)+2*Nf+1]; b = Vip[(ij-jk)+2*Nf+1];
+            dvals  = (T*a, T*a, -T*conj(b), -T*conj(b));    # Vwmn_d  block = T*diag(a, a, -conj(b), -conj(b))
+            d1vals = (T*conj(b), T*conj(b), -T*a, -T*a);    # Vwmn_d1 block = T*diag(conj(b), conj(b), -a, -a)
+            rL = 4*(-ij+Nf+1)-3; cR = 4*(2*Nf+1) + 4*(-jk+Nf+1)-3; # Vwmn_d  -> top-right   (L rows, R cols)
+            rR = 4*(2*Nf+1) + 4*(-ij+Nf+1)-3; cL = 4*(-jk+Nf+1)-3; # Vwmn_d1 -> bottom-left (R rows, L cols)
+            for t = 0:3
+                if dvals[t+1] != 0
+                    push!(Is, rL+t); push!(Js, cR+t); push!(Vs, dvals[t+1]);
+                end
+                if d1vals[t+1] != 0
+                    push!(Is, rR+t); push!(Js, cL+t); push!(Vs, d1vals[t+1]);
+                end
+            end
+        end
+    end
+    return sparse(Is, Js, Vs, 2*4*(2*Nf+1), 2*4*(2*Nf+1));
+end
+
+"""
     Viwmnf(Vip, Nf, T) -> Matrix{ComplexF64}
 
 Current-vertex variant of [`Vwmnf`](@ref): same hopping but with the hole-Nambu sign
@@ -1764,16 +1824,25 @@ function IbiasJacobian_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, K
     # locals, allocated once per chunk and reused via mul! across the chunk's frequencies and the
     # 4Nf columns) -- no TaskLocalValue needed, and per-chunk allocation is negligible vs compute.
     # Pair with BLAS.set_num_threads(1) so this Julia-level parallelism isn't oversubscribed.
-    # (For heterogeneous P/E cores, raise nchunks and use `Threads.@threads :dynamic`.)
     N8 = 8*(2*Nf+1);
     nchunks = min(Nw0, max(Threads.nthreads(), 1));
     cb = round.(Int, range(0, Nw0; length = nchunks+1)); # contiguous chunk boundaries of 1:Nw0
     partials = [zeros(ComplexF64, 2*Nf+1, 2*Nf+1, 2*(2*Nf)) for _ = 1:nchunks];
+    # Same result as the dense path below, but skips the cross-lead (LR, RL) quadrants of t3
+    # that the trace never reads: compute ONLY the lead-diagonal LL and RR quadrants via
+    # row/col-restricted GEMMs, (X*Y)[Lrows,Lcols] = X[Lrows,:]*Y[:,Lcols]. Halves the dense
+    # 8(2Nf+1)^3 GEMM work (4 quadrant GEMMs of size off-square vs 2 full N8-square). The row
+    # slices [1:off]/[off+1:N8] and column slices are unit-stride views, so BLAS needs no copy.
     Threads.@threads for c = 1:nchunks
         jacloc = partials[c];                            # private accumulator (alias, mutated in place)
         Glwmntemp = zeros(ComplexF64, N8, N8); Glwmn = zeros(ComplexF64, N8, N8);
         VviGrwmn  = zeros(ComplexF64, N8, N8); VviGlwmn = zeros(ComplexF64, N8, N8);
-        t1 = zeros(ComplexF64, N8, N8); t2 = zeros(ComplexF64, N8, N8); t3 = zeros(ComplexF64, N8, N8);
+        t1 = zeros(ComplexF64, N8, N8); t2 = zeros(ComplexF64, N8, N8); tC = zeros(ComplexF64, N8, N8);
+        tLL = zeros(ComplexF64, off, off); tRR = zeros(ComplexF64, off, off);
+        VviGlwmnL = @view VviGlwmn[1:off, :];    VviGrwmnL = @view VviGrwmn[1:off, :];       # lead-L rows
+        VviGlwmnR = @view VviGlwmn[off+1:N8, :]; VviGrwmnR = @view VviGrwmn[off+1:N8, :];     # lead-R rows
+        t1L = @view t1[:, 1:off];    t2L = @view t2[:, 1:off];    tC_LL = @view tC[1:off, 1:off];       # lead-L cols
+        t1R = @view t1[:, off+1:N8]; t2R = @view t2[:, off+1:N8]; tC_RR = @view tC[off+1:N8, off+1:N8];  # lead-R cols
         for gh = (cb[c]+1):cb[c+1]
             Grwmn = Keldyshsetup_Floquetn_ext.Grwmnf(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR);
             Gawmn = conj(transpose(Grwmn));
@@ -1781,19 +1850,45 @@ function IbiasJacobian_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, K
             mul!(Glwmntemp, Grwmn, Sigl); mul!(Glwmn, Glwmntemp, Gawmn);               # G< = Gr Sig< Ga
             mul!(VviGrwmn, -Vvi, Grwmn); mul!(VviGlwmn, -Vvi, Glwmn);                  # -Vi.Gr , -Vi.G<
             for ij = 1:(4*Nf)
-                mul!(t1, Marsp[ij], Gawmn);  mul!(t3, VviGlwmn, t1)        # -Vi.G< (dV.Ga)
-                mul!(t2, Marsp[ij], Glwmn);  mul!(t3, VviGrwmn, t2, 1, 1)  # + -Vi.Gr (dV.G<)
-                mul!(t3, Miarsp[ij], Glwmn, 1, 1)                         # + (-dVi).G<
-
+                # tLL = VviGlwmn[Lrows,:]·t1[:,Lcols] + VviGrwmn[Lrows,:]·t2[:,Lcols] + (Miarsp·Glwmn)[Lrows,Lcols]
+                # tRR = VviGlwmn[Rrows,:]·t1[:,Rcols] + VviGrwmn[Rrows,:]·t2[:,Rcols] + (Miarsp·Glwmn)[Rrows,Rcols]
+                mul!(t1, Marsp[ij], Gawmn); mul!(t2, Marsp[ij], Glwmn); mul!(tC, Miarsp[ij], Glwmn);
+                mul!(tLL, VviGlwmnL, t1L); mul!(tLL, VviGrwmnL, t2L, 1, 1); tLL .+= tC_LL   # LL quadrant = t3[1:off,1:off]
+                mul!(tRR, VviGlwmnR, t1R); mul!(tRR, VviGrwmnR, t2R, 1, 1); tRR .+= tC_RR   # RR quadrant = t3[off+1:N8,off+1:N8]
                 # Nambu(x)spin trace (4 diag components) per Floquet pair: lead L (LL) minus lead R (RR)
                 for jk = 1:(2*Nf+1)
                     for kl = 1:(2*Nf+1)
-                        @views jacloc[jk,kl,ij] += (t3[4*jk-3,4*kl-3]+t3[4*jk-2,4*kl-2]+t3[4*jk-1,4*kl-1]+t3[4*jk,4*kl]) - (t3[off+4*jk-3,off+4*kl-3]+t3[off+4*jk-2,off+4*kl-2]+t3[off+4*jk-1,off+4*kl-1]+t3[off+4*jk,off+4*kl]);
+                        @views jacloc[jk,kl,ij] += (tLL[4*jk-3,4*kl-3]+tLL[4*jk-2,4*kl-2]+tLL[4*jk-1,4*kl-1]+tLL[4*jk,4*kl]) - (tRR[4*jk-3,4*kl-3]+tRR[4*jk-2,4*kl-2]+tRR[4*jk-1,4*kl-1]+tRR[4*jk,4*kl]);
                     end
                 end
             end
         end
     end
+    # Threads.@threads for c = 1:nchunks
+    #     jacloc = partials[c];                            # private accumulator (alias, mutated in place)
+    #     Glwmntemp = zeros(ComplexF64, N8, N8); Glwmn = zeros(ComplexF64, N8, N8);
+    #     VviGrwmn  = zeros(ComplexF64, N8, N8); VviGlwmn = zeros(ComplexF64, N8, N8);
+    #     t1 = zeros(ComplexF64, N8, N8); t2 = zeros(ComplexF64, N8, N8); t3 = zeros(ComplexF64, N8, N8);
+    #     for gh = (cb[c]+1):cb[c+1]
+    #         Grwmn = Keldyshsetup_Floquetn_ext.Grwmnf(war0[gh], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR);
+    #         Gawmn = conj(transpose(Grwmn));
+    #         Sigl = Keldyshsetup_Floquetn_ext.Siglf(war0[gh], Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR);
+    #         mul!(Glwmntemp, Grwmn, Sigl); mul!(Glwmn, Glwmntemp, Gawmn);               # G< = Gr Sig< Ga
+    #         mul!(VviGrwmn, -Vvi, Grwmn); mul!(VviGlwmn, -Vvi, Glwmn);                  # -Vi.Gr , -Vi.G<
+    #         for ij = 1:(4*Nf)
+    #             mul!(t1, Marsp[ij], Gawmn);  mul!(t3, VviGlwmn, t1)        # -Vi.G< (dV.Ga)
+    #             mul!(t2, Marsp[ij], Glwmn);  mul!(t3, VviGrwmn, t2, 1, 1)  # + -Vi.Gr (dV.G<)
+    #             mul!(t3, Miarsp[ij], Glwmn, 1, 1)                         # + (-dVi).G<
+
+    #             # Nambu(x)spin trace (4 diag components) per Floquet pair: lead L (LL) minus lead R (RR)
+    #             for jk = 1:(2*Nf+1)
+    #                 for kl = 1:(2*Nf+1)
+    #                     @views jacloc[jk,kl,ij] += (t3[4*jk-3,4*kl-3]+t3[4*jk-2,4*kl-2]+t3[4*jk-1,4*kl-1]+t3[4*jk,4*kl]) - (t3[off+4*jk-3,off+4*kl-3]+t3[off+4*jk-2,off+4*kl-2]+t3[off+4*jk-1,off+4*kl-1]+t3[off+4*jk,off+4*kl]);
+    #                 end
+    #             end
+    #         end
+    #     end
+    # end
     jacIif = sum(partials);                              # reduce the per-chunk partials
 
     jacIif .*= deltaw0 / (2*pi); # complete the (1/2pi) frequency integral
