@@ -17,17 +17,17 @@ using JLD
 # ---------------------------------------------------------------------------
 
 #size
-Nf = 30;
+Nf = 24;
 
 #energies
-mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 1e-2;
+mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 2e-2;
 dw0 = minimum([0.015, Gamma/2.0]);
 
 #classical-spin impurities (units of Delta): J=(Jx,Jy,Jz) exchange, K potential
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 self-consistent I-V)
 #  collinear YSR:        JL=JR=[0,0,Jz]
 #  non-collinear/diode:  rotate JR vs JL, e.g. JR=Jz*[sin(th),0,cos(th)]
-JL = [0.0, 0.0, 4.0]; KL = 0.0;
+JL = [0.0, 0.0, 4.0]; KL = 1.0;
 JR = [0.0, 0.0, 4.0]; KR = 0.0;
 
 #YSR bound-state energies (in-gap poles of each lead's impurity-dressed surface GF)
@@ -41,9 +41,9 @@ println("                  | R lead: analytical=$(round.(EYSR_Ra./delta, digits=
 #voltage
 signed_evar = false;
 if signed_evar
-    Nev1 = 140; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+    Nev1 = 100; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 else
-    Nev = 140; evar = delta*range(0.24, 3.2, Nev);
+    Nev = 100; evar = delta*range(0.24, 3.2, Nev);
 end
 
 #time (for phase reconstruction)
