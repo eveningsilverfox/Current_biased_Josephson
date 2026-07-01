@@ -2349,6 +2349,14 @@ Main current-bias driver for the 4x4 Nambu(x)spin (YSR) module. For each bias eV
 Per-lead classical-spin impurities are `JL,KL` (left) and `JR,KR` (right). Only the
 exact-Dyson scheme `ws=0` is supported; perturbative schemes are not yet ported.
 
+Seeding: if `Vipsolseed` is `nothing` (default), the largest-|V| point uses the trivial
+seed and every lower point continues from its neighbour. If `Vipsolseed` is supplied it
+must be an `Nev x 4Nf` array aligned to `evar` (row `hi` <-> `evar[hi]`); then EVERY bias
+point is seeded from `Vipsolseed[hi,:]` instead of by continuation -- e.g. feed a saved,
+well-converged KL=KR=0 run so each asymmetric (diode) point starts from the nearby
+symmetric solution at the same V, sidestepping the YSR-resonance continuation folds.
+(`Nevseed` is retained only for signature compatibility and is unused.)
+
 # Returns
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
@@ -2369,14 +2377,13 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vips
         Nw0 = trunc(Int, abs(Omega)/dw0);
         war0 = -0.5*abs(Omega) .+ range(0, (Nw0-1)*abs(Omega)/Nw0, Nw0);
 
-        if hi == Nev
-            if Vipsolseed == nothing
-                Vipseed[Nf] = 1;
-            else
-                Vipseed = Vipsolseed[Nevseed,:];
-            end
+        if Vipsolseed !== nothing
+            Vipseed .= Vipsolseed[hi,:];   # per-voltage external seed: row hi aligns with evar[hi]
+                                           # (e.g. the saved KL=KR=0 solution at this same V), bypassing continuation
+        elseif hi == Nev
+            Vipseed[Nf] = 1;               # default: trivial seed at the largest |V|
         else
-            Vipseed .= Vipsol[hi+1,:];
+            Vipseed .= Vipsol[hi+1,:];     # default: continuation from the adjacent bias point
         end
 
         if ws == 4
