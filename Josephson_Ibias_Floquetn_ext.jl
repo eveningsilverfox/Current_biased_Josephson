@@ -60,8 +60,23 @@ fvec(v) = join(fnum.(v), "-");                                                  
 str1 = "Nf$(Nf)_Ibias_ext_delta$(fnum(delta))_zeta$(fnum(zeta))_T$(fnum(T))_Gam$(fnum(Gamma))_V$(fnum(first(evar)))_$(fnum(last(evar)))_$(Nev)_JL$(fvec(JL))_KL$(fnum(KL))_JR$(fvec(JR))_KR$(fnum(KR))";
 str2 = "n_" * str1;
 
+## ----------Load seed solution (optional)----------
+# Seed every voltage from a previously-saved Vipsol on the same grid (e.g. the
+# well-converged KL=KR=0 symmetric run) instead of by continuation. The loaded 
+# run must share Nf, delta, zeta, T, Gamma and the evar grid (range + Nev),
+# only the impurity (JL,KL,JR,KR) differs.
+load_sol = false;
+Vipseed_load = nothing;
+if load_sol
+    JL_load = [0.0, 0.0, 4.0]; KL_load = 0.0;   # impurity of the run to load (symmetric: KL=KR=0)
+    JR_load = [0.0, 0.0, 4.0]; KR_load = 0.0;
+    str1_load = "Nf$(Nf)_Ibias_ext_delta$(fnum(delta))_zeta$(fnum(zeta))_T$(fnum(T))_Gam$(fnum(Gamma))_V$(fnum(first(evar)))_$(fnum(last(evar)))_$(Nev)_JL$(fvec(JL_load))_KL$(fnum(KL_load))_JR$(fvec(JR_load))_KR$(fnum(KR_load))";
+    str2_load = "n_" * str1_load;
+    Vipseed_load = load("Vipsol_" * str2_load * ".jld", "Vipsol");
+    @assert size(Vipseed_load) == (Nev, 2*(2*Nf)) "loaded Vipsol size $(size(Vipseed_load)) != expected ($(Nev), $(2*(2*Nf))); check Nf / Nev / evar match";
+end
+
 ## ----------Self-consistent solve----------
-Vipsolseed = nothing; Nevseed = nothing;
 if signed_evar
     # Bidirectional solve: split at the sign change and solve each branch
     # independently, each starting from its largest-|V| point (where the simple
@@ -69,17 +84,22 @@ if signed_evar
     Nneg = count(<(0), evar);                          # = Nev1
     evarneg = evar[1:Nneg]; evarpos = evar[Nneg+1:end];
 
+    # Per-voltage loaded seed sliced to match each branch (the neg branch is solved on
+    # reverse(evarneg), so its seed rows are reversed to stay row-aligned to evar).
+    seedneg = load_sol ? reverse(Vipseed_load[1:Nneg, :], dims=1) : nothing;
+    seedpos = load_sol ? Vipseed_load[Nneg+1:end, :]             : nothing;
+
     # Negative branch: phisolve sweeps last->first, so pass it reversed to start
     # at the most-negative (largest |V|), then undo the reverse.
-    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, nothing, nothing);
+    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, seedneg, nothing);
     Ivn = reverse(Ivn); Vipn = reverse(Vipn, dims=1); resn = reverse(resn);
 
     # Positive branch: identical to the unsigned run.
-    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipsolseed, Nevseed);
+    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, seedpos, nothing);
 
     Iv = [Ivn; Ivp]; Vipsol = [Vipn; Vipp]; residualarr = [resn; resp];
 else
-    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipsolseed, Nevseed)
+    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipseed_load, nothing)
 end
 
 dIdv = zeros(Float64, Nev);
@@ -128,10 +148,12 @@ end
 RN = Keldyshsetup_Floquetn_ext.RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR);
 
 ## ------------Saving----------------
-# save("Vipsol_" * str2 * ".jld", "Vipsol", Vipsol);
+save("Vipsol_" * str2 * ".jld", "Vipsol", Vipsol);   # needed as the load_sol seed for later (e.g. diode) runs
 # save("IV_Ibias_" * str2 * ".jld", "Iv", Iv);
 
 ## ----------Plots----------
+plotresidual = true;   # if true, overlay the per-bias-point solver residual on the I-V (right y-axis)
+
 # YSR energy annotation (numerical, positive in-gap pole, in units of Δ)
 ysrLval = round(EYSR_Ln[2]/delta, digits=3); ysrRval = round(EYSR_Rn[2]/delta, digits=3);
 ysrann1 = text(latexstring("\\epsilon_{YSR,L}/\\Delta=$(ysrLval)"), 11, :left);
@@ -157,6 +179,14 @@ plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(5
 let xlo = minimum(evar/delta), xhi = maximum(evar/delta), ylo = minimum(Iv .* RN), yhi = maximum(Iv .* RN)
     annotate!(p2, xlo + 0.03*(xhi-xlo), yhi - 0.07*(yhi-ylo), ysrann1)
     annotate!(p2, xlo + 0.03*(xhi-xlo), yhi - 0.16*(yhi-ylo), ysrann2)
+end
+if plotresidual
+    # Solver residual per bias point on a second (right) y-axis, log-scaled so the
+    # converged (~1e-12) points and the stalled (~1e-3) ones are both visible.
+    axr = twinx(p2);
+    plot!(axr, evar/delta, max.(residualarr, 1e-16), lc=:red, lw=1.2, yscale=:log10,
+          ylabel=L"\mathrm{residual}\ ||F||", legend=:none, tickfontsize=17, guidefontsize=17,
+          y_foreground_color_axis=:red, y_foreground_color_text=:red, y_foreground_color_border=:red, yguidefontcolor=:red);
 end
 savefig(plot!(p2, dpi=450), "IV_Ibias_" * str2 * ".png")
 
