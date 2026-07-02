@@ -27,7 +27,7 @@ dw0 = minimum([0.015, Gamma/2.0]);
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 self-consistent I-V)
 #  collinear YSR:        JL=JR=[0,0,Jz]
 #  non-collinear/diode:  rotate JR vs JL, e.g. JR=Jz*[sin(th),0,cos(th)]
-JL = [0.0, 0.0, 4.0]; KL = 1.0;
+JL = [0.0, 0.0, 4.0]; KL = 0.5;
 JR = [0.0, 0.0, 4.0]; KR = 0.0;
 
 #YSR bound-state energies (in-gap poles of each lead's impurity-dressed surface GF)
@@ -53,6 +53,12 @@ tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = rang
 
 #Scheme (only ws=0 supported in the 4x4 ext module)
 ws = 0;
+
+#Homotopy rescue (phisolve rescue mode; 0 = off). If a bias point misses tol_accept,
+#re-solve it at fixed V ramping KL,KR -> full value in max_scansteps stages, chaining
+#seeds from the loaded KL=KR=0 solution (use with load_sol = true). A rescued point
+#seeds its neighbour by continuation, so the ramp usually fires only at band entry.
+max_scansteps = 10;
 
 #naming
 fnum(x) = x isa Integer ? string(x) : replace(string(round(x, sigdigits=4)), "." => "p");   # numeric value -> filename token ('.' -> 'p')
@@ -91,15 +97,15 @@ if signed_evar
 
     # Negative branch: phisolve sweeps last->first, so pass it reversed to start
     # at the most-negative (largest |V|), then undo the reverse.
-    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, seedneg, nothing);
+    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, seedneg, nothing; max_scansteps = max_scansteps);
     Ivn = reverse(Ivn); Vipn = reverse(Vipn, dims=1); resn = reverse(resn);
 
     # Positive branch: identical to the unsigned run.
-    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, seedpos, nothing);
+    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, seedpos, nothing; max_scansteps = max_scansteps);
 
     Iv = [Ivn; Ivp]; Vipsol = [Vipn; Vipp]; residualarr = [resn; resp];
 else
-    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipseed_load, nothing)
+    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipseed_load, nothing; max_scansteps = max_scansteps)
 end
 
 dIdv = zeros(Float64, Nev);
@@ -148,7 +154,7 @@ end
 RN = Keldyshsetup_Floquetn_ext.RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR);
 
 ## ------------Saving----------------
-save("Vipsol_" * str2 * ".jld", "Vipsol", Vipsol);   # needed as the load_sol seed for later (e.g. diode) runs
+save("Vipsol_" * str2 * ".jld", "Vipsol", Vipsol, "residualarr", residualarr, "Iv", Iv);   # seed for load_sol + inputs for the rescue driver
 # save("IV_Ibias_" * str2 * ".jld", "Iv", Iv);
 
 ## ----------Plots----------
