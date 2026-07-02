@@ -2341,7 +2341,7 @@ end
 
 """
     phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma,
-             JL, KL, JR, KR, Vipsolseed=nothing, Nevseed=nothing) -> (Iv, Vipsol, residualarr)
+             JL, KL, JR, KR, Vipsolseed=nothing) -> (Iv, Vipsol, residualarr)
 
 Main current-bias driver for the 4x4 Nambu(x)spin (YSR) module. For each bias eV in
 `evar` (swept high->low with continuation), solves the self-consistency F(x)=0 with
@@ -2349,31 +2349,31 @@ Main current-bias driver for the 4x4 Nambu(x)spin (YSR) module. For each bias eV
 Per-lead classical-spin impurities are `JL,KL` (left) and `JR,KR` (right). Only the
 exact-Dyson scheme `ws=0` is supported; perturbative schemes are not yet ported.
 
-Seeding: if `Vipsolseed` is `nothing` (default), the largest-|V| point uses the trivial
-seed and every lower point continues from its neighbour. If `Vipsolseed` is supplied it
-must be an `Nev x 4Nf` array aligned to `evar` (row `hi` <-> `evar[hi]`); then EVERY bias
-point is seeded from `Vipsolseed[hi,:]` instead of by continuation -- e.g. feed a saved,
-well-converged KL=KR=0 run so each asymmetric (diode) point starts from the nearby
-symmetric solution at the same V, sidestepping the YSR-resonance continuation folds.
-(`Nevseed` is retained only for signature compatibility and is unused.)
+Seeding: the largest-|V| point uses the trivial seed and every lower point continues from
+its neighbour. `Vipsolseed` does NOT enter the direct solves -- it is used only as the
+stage-1 seed of the homotopy rescue (see below), so it is ignored unless
+`max_scansteps > 0`. When supplied it must be an `Nev x 4Nf` array aligned to `evar`
+(row `hi` <-> `evar[hi]`), e.g. the saved, well-converged KL=KR=0 run on the same grid.
 
 Keyword arguments `ftols` (1e-12), `xtols` (1e-10), `itermax` (40) override the nlsolve
 exit criteria, e.g. a larger `itermax` for diagnostic runs where the trust-region crawl
-needs more than 40 iterations to traverse an ill-conditioned stretch.
+needs more than 40 iterations to traverse an ill-conditioned stretch; `max_scansteps` (0),
+`tol_accept` (1e-9), `itermax_scan` (100) control rescue mode. Being keywords, they can
+be supplied by name in any order, e.g. `phisolve(...; itermax = 60, max_scansteps = 10)`.
 
-Rescue mode (`max_scansteps > 0`, ws=0 only): whenever a bias point misses `tol_accept`,
-it is re-solved by a K-homotopy at fixed V -- ramp `KL,KR` to their full values in
-`max_scansteps` stages (`KL*st/max_scansteps`), chaining seeds, stage 1 from
-`Vipsolseed[hi,:]` (recommended: the saved KL=KR=0 solution). Each stage gets
-`itermax_scan` iterations (middle stages need 40-50; single-point scans at
-eV/Delta = 1.29, 1.08 confirmed the branch is connected). Seeding priority also changes:
-a converged neighbour's solution is preferred over `Vipsolseed[hi,:]`, so a rescued
-point re-arms plain continuation and the homotopy typically fires only at band entry.
+Rescue mode (`max_scansteps > 0`, ws=0, requires `Vipsolseed`): whenever a bias point
+misses `tol_accept`, it is re-solved by a K-homotopy at fixed V -- ramp `KL,KR` to their
+full values in `max_scansteps` stages (`KL*st/max_scansteps`) from 0, chaining seeds. If the 
+final stage still misses `tol_accept` the bias point is abandoned (`Iv` left 0, direct residual 
+kept). Each stage gets `itermax_scan` iterations. Since the sweep continues from the last
+stored solution, a successful rescue re-arms continuation for the next point (ramps
+typically fire only at entry into the hard band); after a failed rescue the next point
+inherits the unconverged continuation seed and its own rescue catches it.
 
 # Returns
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
-function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipsolseed = nothing, Nevseed = nothing;
+function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipsolseed = nothing;
                   ftols = 1e-12, xtols = 1e-10, itermax = 40, max_scansteps = 0, tol_accept = 1e-9, itermax_scan = 100)
     Nev = length(evar);
 
@@ -2389,13 +2389,7 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vips
         Nw0 = trunc(Int, abs(Omega)/dw0);
         war0 = -0.5*abs(Omega) .+ range(0, (Nw0-1)*abs(Omega)/Nw0, Nw0);
 
-        if max_scansteps > 0 && hi < Nev && residualarr[hi+1] < tol_accept
-            Vipseed .= Vipsol[hi+1,:];     # rescue mode: continuation from a CONVERGED neighbour is the
-                                           # best seed (a rescued point re-arms continuation downstream)
-        elseif Vipsolseed !== nothing
-            Vipseed .= Vipsolseed[hi,:];   # per-voltage external seed: row hi aligns with evar[hi]
-                                           # (e.g. the saved KL=KR=0 solution at this same V), bypassing continuation
-        elseif hi == Nev
+        if hi == Nev
             Vipseed[Nf] = 1;               # default: trivial seed at the largest |V|
         else
             Vipseed .= Vipsol[hi+1,:];     # default: continuation from the adjacent bias point
@@ -2431,7 +2425,7 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vips
         #  re-solve at fixed V ramping the impurity potentials KL,KR from ~0 to their full values
         #  in max_scansteps stages, chaining seeds. Stage 1 seeds from the per-voltage external
         #  seed (recommended: the KL=KR=0 solution at this V), matching the validated KL scans.
-        if max_scansteps > 0 && residualarr[hi] > tol_accept && ws == 0
+        if max_scansteps > 0 && Vipsolseed !== nothing && residualarr[hi] > tol_accept && ws == 0
             println("-- Homotopy rescue at ev iter = $hi (direct residual = $(residualarr[hi]))")
             println("   Reusing the solution at KL=KR=0 and ramping KL,KR to their full values in $max_scansteps stages")
             # Use provided seed (KL=KR=0) if available, else the default seed (solution at previous bias point)
@@ -2446,8 +2440,13 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vips
                     println("   scanstep $(st) residual = $(resh.residual_norm)")
                 end
             end
-            Vipsol[hi,:] = seedh; residualarr[hi] = resnormh;
-            println("-- Homotopy rescue SUCCEEDED at ev iter = $hi (residual = $resnormh)")
+            if resnormh < tol_accept
+                Vipsol[hi,:] = seedh; residualarr[hi] = resnormh;
+                println("-- Homotopy rescue SUCCEEDED at ev iter = $hi (residual = $resnormh)")
+            else
+                println("-- Homotopy rescue FAILED at ev iter = $hi (final residual = $resnormh); terminating this bias point")
+                continue # keep the direct result in Vipsol/residualarr as the failure record; Iv stays 0
+            end
         end
 
         #find current using solution, verify only DC component present
