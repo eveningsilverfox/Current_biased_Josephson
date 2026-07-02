@@ -2357,18 +2357,21 @@ well-converged KL=KR=0 run so each asymmetric (diode) point starts from the near
 symmetric solution at the same V, sidestepping the YSR-resonance continuation folds.
 (`Nevseed` is retained only for signature compatibility and is unused.)
 
+Keyword arguments `ftols` (1e-12), `xtols` (1e-10), `itermax` (40) override the nlsolve
+exit criteria, e.g. a larger `itermax` for diagnostic runs where the trust-region crawl
+needs more than 40 iterations to traverse an ill-conditioned stretch.
+
 # Returns
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
-function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipsolseed = nothing, Nevseed = nothing)
+function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipsolseed = nothing, Nevseed = nothing;
+                  ftols = 1e-12, xtols = 1e-10, itermax = 40)
     Nev = length(evar);
 
     If = zeros(ComplexF64, Nev,2*Nf+1,2*Nf+1); Ifa = zeros(ComplexF64, Nev,4*Nf+1); Iv = zeros(Float64, Nev);
     Vipsol = zeros(Float64, Nev, 2*(2*Nf)); #(2*Nf) real + (2*Nf) imag, only odd multiples of eV kept
     Vipseed = zeros(Float64, 2*(2*Nf));
     residualarr = zeros(Float64, Nev);
-
-    ftols = 1e-12; xtols = 1e-10; itermax = 40;
 
     for hi = Nev:-1:1
         println("ev iter = ",hi)

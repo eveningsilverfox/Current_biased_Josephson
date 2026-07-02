@@ -36,11 +36,13 @@ JR = [0.0, 0.0, 4.0]; KR = 0.0;
 Nev = 100; evar = delta*range(0.24, 3.2, Nev);
 
 #the failing bias point to probe (39 -> eV/Delta ~ 1.38, just below Delta+eL+eR)
-ifail = 39;
+ifail = 36;
 
 #KL stages (extend to 1.0 once 0.5 is reached; insert midpoints where a stage fails)
 KLlist = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5];
 tol_accept = 1e-8;   # stage counts as converged below this residual
+itermax_scan = 150;  # generous budget: a slow trust-region crawl that WOULD converge must
+                     # not be mislabelled FAILED by the production itermax=40 cap
 
 #Scheme (only ws=0 supported in the 4x4 ext module)
 ws = 0;
@@ -71,7 +73,7 @@ for st = 1:Nst
     EL = Keldyshsetup_Floquetn_ext.ysr_energies_numerical(JL, KLs, zeta, delta);
     println("eYSR_L/Delta = $(round.(EL./delta, digits=5))")
 
-    Iv1, Vip1, res1 = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, [evfail], Nf, zeta, delta, T, Gamma, JL, KLs, JR, KR, seed, nothing);
+    Iv1, Vip1, res1 = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, [evfail], Nf, zeta, delta, T, Gamma, JL, KLs, JR, KR, seed, nothing; itermax = itermax_scan);
     reslog[st] = res1[1]; Ivlog[st] = Iv1[1]; Vipstages[st,:] = Vip1[1,:];
     @printf("stage KL=%.3f : residual = %.3e   Iv = %.6f\n", KLs, res1[1], Iv1[1])
 
