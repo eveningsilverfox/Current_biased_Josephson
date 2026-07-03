@@ -35,8 +35,10 @@ JR = [0.0, 0.0, 4.0]; KR = 0.0;
 #voltage grid of the SAVED KL=KR=0 run (must match its file exactly)
 Nev = 100; evar = delta*range(0.24, 3.2, Nev);
 
-#the failing bias point to probe (39 -> eV/Delta ~ 1.38, just below Delta+eL+eR)
-ifail = 36;
+#the bias point to probe (23 -> eV/Delta ~ 0.898: bottom of the NEGATIVE-current dip of
+#the KL=0.5 continuation sweep; watch whether Iv(KL) slides negative smoothly -- branch
+#genuinely dives (stability exchange) -- or stays positive -- the sweep hopped branches)
+ifail = 23;
 
 #KL stages (extend to 1.0 once 0.5 is reached; insert midpoints where a stage fails)
 KLlist = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5];
@@ -61,6 +63,10 @@ evfail = evar[ifail];
 println("KL scan at eV/Delta = $(evfail/delta)  (ifail = $ifail)")
 println("stages: KL = ", KLlist)
 
+## ----------RN (fixed, at the target impurity; same normalization as the driver plot)----------
+RN = Keldyshsetup_Floquetn_ext.RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KLlist[end], JR, KR);
+println("RN = ", RN)
+
 ## ----------Ramp KL, chaining seeds----------
 seed = reshape(Vipsol0[ifail,:], 1, :);          # 1-row seed matrix for the 1-point evar
 Nst = length(KLlist);
@@ -75,7 +81,7 @@ for st = 1:Nst
 
     Iv1, Vip1, res1 = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, [evfail], Nf, zeta, delta, T, Gamma, JL, KLs, JR, KR, seed, itermax = itermax_scan);
     reslog[st] = res1[1]; Ivlog[st] = Iv1[1]; Vipstages[st,:] = Vip1[1,:];
-    @printf("stage KL=%.3f : residual = %.3e   Iv = %.6f\n", KLs, res1[1], Iv1[1])
+    @printf("stage KL=%.3f : residual = %.3e   Iv = %.6f   IeRN/Delta = %.4f\n", KLs, res1[1], Iv1[1], Iv1[1]*RN/delta)
 
     if res1[1] < tol_accept
         global seed = Vip1;                      # chain: next stage seeds from this solution
@@ -91,8 +97,8 @@ end
 println("\n===== KL-scan summary at eV/Delta = $(evfail/delta) =====")
 for st = 1:Nst
     isnan(reslog[st]) && continue
-    @printf("KL = %5.3f   residual = %10.3e   Iv = %12.6f   %s\n", KLlist[st], reslog[st], Ivlog[st], reslog[st] < tol_accept ? "ok" : "FAILED")
+    @printf("KL = %5.3f   residual = %10.3e   Iv = %12.6f   IeRN/Delta = %8.4f   %s\n", KLlist[st], reslog[st], Ivlog[st], Ivlog[st]*RN/delta, reslog[st] < tol_accept ? "ok" : "FAILED")
 end
 
 save("KLscan_ev$(fnum(evfail/delta))_" * str2_load * ".jld",
-     "KLlist", KLlist, "reslog", reslog, "Ivlog", Ivlog, "Vipstages", Vipstages, "evfail", evfail);
+     "KLlist", KLlist, "reslog", reslog, "Ivlog", Ivlog, "Vipstages", Vipstages, "evfail", evfail, "RN", RN);

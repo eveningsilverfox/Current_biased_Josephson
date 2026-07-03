@@ -5,6 +5,7 @@ using LinearAlgebra
 using Statistics
 using LaTeXStrings
 using NLsolve
+using NonlinearSolve
 using OhMyThreads: TaskLocalValue
 using Symbolics
 using SparseArrays
@@ -2361,6 +2362,13 @@ needs more than 40 iterations to traverse an ill-conditioned stretch; `max_scans
 `tol_accept` (1e-9), `itermax_scan` (100) control rescue mode. Being keywords, they can
 be supplied by name in any order, e.g. `phisolve(...; itermax = 60, max_scansteps = 10)`.
 
+`solver` selects the nonlinear solver backend: `:tr` (default) NonlinearSolve.TrustRegion
+(actively maintained; same dogleg family as before), `:lm` NonlinearSolve.LevenbergMarquardt
+(damped steps that stay in the seed's basin -- the branch-safe choice near the multivalued
+subgap window, ~3-4x slower), `:nlsolve` the legacy NLsolve :trust_region. All use the
+analytic Jacobian; `xtols` applies only to `:nlsolve` (the others stop on `abstol = ftols`
+or `itermax`).
+
 Rescue mode (`max_scansteps > 0`, ws=0, requires `Vipsolseed`): whenever a bias point
 misses `tol_accept`, it is re-solved by a K-homotopy at fixed V -- ramp `KL,KR` to their
 full values in `max_scansteps` stages (`KL*st/max_scansteps`) from 0, chaining seeds. If the 
@@ -2374,13 +2382,35 @@ inherits the unconverged continuation seed and its own rescue catches it.
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
 function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipsolseed = nothing;
-                  ftols = 1e-12, xtols = 1e-10, itermax = 40, max_scansteps = 0, tol_accept = 1e-9, itermax_scan = 100)
+                  ftols = 1e-16, xtols = 1e-13, itermax = 60, max_scansteps = 0, tol_accept = 1e-9, itermax_scan = 100,
+                  solver = :tr)
     Nev = length(evar);
 
     If = zeros(ComplexF64, Nev,2*Nf+1,2*Nf+1); Ifa = zeros(ComplexF64, Nev,4*Nf+1); Iv = zeros(Float64, Nev);
     Vipsol = zeros(Float64, Nev, 2*(2*Nf)); #(2*Nf) real + (2*Nf) imag, only odd multiples of eV kept
     Vipseed = zeros(Float64, 2*(2*Nf));
     residualarr = zeros(Float64, Nev);
+
+    # --- single-point nonlinear solve, dispatched by `solver` ---
+    #   :tr      NonlinearSolve.TrustRegion (default; same dogleg family as NLsolve's :trust_region)
+    #   :lm      NonlinearSolve.LevenbergMarquardt (damped steps; stays in the seed's basin, robust
+    #            to the near-singular Newton overshoot, ~3-4x slower -- use for branch-sensitive points)
+    #   :nlsolve legacy NLsolve :trust_region (kept for comparison; the only one that uses xtols)
+    # The residual/Jacobian are real-valued but stored in complex arrays; NonlinearSolve gets the
+    # real parts. Returns (solution, residual 2-norm).
+    function solvept(fres, fjac, x0, itmax)
+        if solver == :nlsolve
+            res = nlsolve(fres, fjac, x0, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itmax);
+            return res.zero, res.residual_norm
+        else
+            f!(F, x, p) = (F .= real.(fres(x)); nothing);
+            j!(Jm, x, p) = (Jm .= real.(fjac(x)); nothing);
+            prob = NonlinearProblem(NonlinearFunction{true}(f!; jac = j!), copy(x0));
+            alg = solver == :lm ? LevenbergMarquardt() : TrustRegion();
+            sol = solve(prob, alg; abstol = ftols, reltol = 0.0, maxiters = itmax); # pure absolute criterion, like NLsolve's ftol
+            return sol.u, norm(sol.resid)
+        end
+    end
 
     for hi = Nev:-1:1
         println("ev iter = ",hi)
@@ -2406,19 +2436,19 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vips
         if fvalue < ftols # seed from higher bias point already satisfies the tolerance, skip the nlsolve
             Vipsol[hi,:] = Vipseed;
             residualarr[hi] = fvalue;
-        else # seed from higher bias point does not satisfy the tolerance, run the nlsolve
+        else # seed from higher bias point does not satisfy the tolerance, run the solver
             t0 = time()
             if ws == 4
-                res = nlsolve(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
+                zsol, rn = solvept(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), Vipseed, itermax);
             elseif ws == 2
-                res = nlsolve(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
+                zsol, rn = solvept(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), Vipseed, itermax);
             elseif ws == 0
-                res = nlsolve(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
+                zsol, rn = solvept(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), Vipseed, itermax);
             end
             t1 = time()
             println("time = ",t1-t0)
-            Vipsol[hi,:] = res.zero;
-            residualarr[hi] = res.residual_norm;
+            Vipsol[hi,:] = zsol;
+            residualarr[hi] = rn;
         end
 
         #--Homotopy rescue (max_scansteps > 0, ws=0 only): the direct solve missed tol_accept, so
@@ -2434,10 +2464,9 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vips
             for st = 1:max_scansteps
                 KLs = KL*(st/max_scansteps); KRs = KR*(st/max_scansteps); # ramp the impurity potentials
                 println("   scanstep $st/$max_scansteps : KL = $KLs, KR = $KRs")
-                resh = nlsolve(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KLs, JR, KRs, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KLs, JR, KRs, hi), seedh, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax_scan);
-                seedh = resh.zero; resnormh = resh.residual_norm;
-                if resh.residual_norm < tol_accept
-                    println("   scanstep $(st) residual = $(resh.residual_norm)")
+                seedh, resnormh = solvept(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KLs, JR, KRs, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KLs, JR, KRs, hi), seedh, itermax_scan);
+                if resnormh < tol_accept
+                    println("   scanstep $(st) residual = $(resnormh)")
                 end
             end
             if resnormh < tol_accept
