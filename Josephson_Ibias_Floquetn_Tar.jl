@@ -52,8 +52,8 @@ for gh = 1:nT
         println("ev iter = ",hi)
     
         ev = evar[hi]; Omega = ev;
-        dw0 = 0.015; Nw0 = trunc(Int, abs(Omega)/dw0); 
-        war0 = range(0, abs(Omega)-dw0, Nw0);
+        dw0 = 0.015; Nw0 = 2*ceil(Int, abs(Omega)/(2*dw0));                # even cell count: PH-symmetric midpoint sampling
+        war0 = -0.5*abs(Omega) .+ ((0:Nw0-1) .+ 0.5) .* (abs(Omega)/Nw0);  # midpoint BZ (was [0, Omega): half-mode-shifted cutoffs)
         
         if hi == Nev && gh == 1
             Vipseed[Nf] = 1;

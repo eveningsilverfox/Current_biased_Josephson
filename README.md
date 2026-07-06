@@ -81,6 +81,9 @@ The hot loops use `Threads.@threads`; start Julia with multiple threads
 | `Josephson_cphir.jl` | Equilibrium current–phase relation `I(φ)` and critical current. |
 | `Josephson_Ibias_Floquetn_ext.jl` | Current-biased driver for the 4×4 (YSR) module. |
 | `Josephson_Vbias_Floquetn_ext.jl` | Voltage-biased driver for the 4×4 (YSR) module. |
+| `Josephson_Ibias_KLscan_ext.jl` | Diagnostic: single-voltage homotopy scan in `KL` (fine-step continuation vs. fold discrimination). |
+| `Josephson_Ibias_stalldiag_ext.jl` | Diagnostic: at stalled bias points, Jacobian SVD (fold detector) + least-squares stationarity probe (root missing vs. solver stuck) + `Nf` tail check. |
+| `Josephson_Ibias_arclength_ext.jl` | Pseudo-arclength continuation in `eV`: follows the running-solution branch through folds that defeat fixed-`eV` solvers (the `KL≠0` low-bias band). |
 
 **Other**
 
