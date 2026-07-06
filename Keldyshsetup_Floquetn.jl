@@ -264,9 +264,8 @@ function current_Vbias_Floquet_Tfull(war1, ev, zeta, delta, T, Gamma)
 
     Nf = 20; Omega = ev; delta1 = 0;
     
-    Nw0 = trunc(Int, abs(Omega)/deltaw1); 
-    # war0 = range(0, (Nw0-1)*Omega/Nw0, Nw0);
-    war0 = -0.5*abs(Omega) .+ range(0, (Nw0-1)*abs(Omega)/Nw0, Nw0);
+    Nw0 = 2*ceil(Int, abs(Omega)/(2*deltaw1));                         # even cell count: PH-symmetric midpoint sampling
+    war0 = -0.5*abs(Omega) .+ ((0:Nw0-1) .+ 0.5) .* (abs(Omega)/Nw0);  # midpoint rule: no sample on the T=0 occupation step
 
     VipI = zeros(ComplexF64, 4*Nf+1);
     VipI[2*Nf] = 1; 
@@ -2346,9 +2345,8 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Vipsolseed = nothing
         println("ev iter = ",hi)
         
         ev = evar[hi]; Omega = ev;
-        Nw0 = trunc(Int, abs(Omega)/dw0); 
-        # war0 = range(0, (Nw0-1)*Omega/Nw0, Nw0);
-        war0 = -0.5*abs(Omega) .+ range(0, (Nw0-1)*abs(Omega)/Nw0, Nw0);
+        Nw0 = 2*ceil(Int, abs(Omega)/(2*dw0));                             # even cell count: PH-symmetric midpoint sampling
+        war0 = -0.5*abs(Omega) .+ ((0:Nw0-1) .+ 0.5) .* (abs(Omega)/Nw0);  # midpoint rule: no sample on the T=0 occupation step
         
         if hi == Nev
             if Vipsolseed == nothing
@@ -2433,9 +2431,9 @@ function RN_full(Nf, dw0, zeta, delta, T, Gamma)
     
     #---RN---
     Omega = maximum([0.1, delta/3]); delta1 = 0;
-    
-    Nw0 = trunc(Int, abs(Omega)/dw0); 
-    war0 = -0.5*abs(Omega) .+ range(0, (Nw0-1)*abs(Omega)/Nw0, Nw0);
+
+    Nw0 = 2*ceil(Int, abs(Omega)/(2*dw0));                             # even cell count: PH-symmetric midpoint sampling
+    war0 = -0.5*abs(Omega) .+ ((0:Nw0-1) .+ 0.5) .* (abs(Omega)/Nw0);  # midpoint rule: no sample on the T=0 occupation step
     
     VipI = zeros(ComplexF64, 4*Nf+1);
     VipI[2*Nf] = 1; 

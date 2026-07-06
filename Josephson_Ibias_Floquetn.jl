@@ -145,8 +145,8 @@ if ws == 2
         println(hi)
 
         ev = evar[hi]; Omega = ev;
-        Nw0 = trunc(Int, abs(Omega)/dw0); 
-        war0 = range(0, abs(Omega)-dw0, Nw0);
+        Nw0 = 2*ceil(Int, abs(Omega)/(2*dw0));                             # even cell count: PH-symmetric midpoint sampling
+        war0 = -0.5*abs(Omega) .+ ((0:Nw0-1) .+ 0.5) .* (abs(Omega)/Nw0);  # midpoint BZ (was [0, Omega): half-mode-shifted cutoffs)
         VipI_2 = zeros(ComplexF64, 4*Nf+1);
         for kl = 1:2*Nf
             VipI_2[2*kl] = Vipsol2[hi,kl] + im*Vipsol2[hi,(2*Nf)+kl];

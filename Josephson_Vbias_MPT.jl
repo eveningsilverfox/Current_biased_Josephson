@@ -13,7 +13,7 @@ using JLD
 
 #energies
 mu = 0; delta = 1; zeta = 25; Gamma = 5e-3; T = 0.4;
-dw1 = Gamma/5; Nw1 = trunc(Int, 2*zeta/dw1); war1 = range(-zeta, zeta, Nw1);
+dw1 = Gamma/5; Nw1 = 2*ceil(Int, zeta/dw1); war1 = -zeta .+ ((0:Nw1-1) .+ 0.5) .* (2*zeta/Nw1); # even-count midpoint sampling: PH-symmetric, no sample on the T=0 step at w=0
 
 #voltage
 Nev = 300; evar = 1*range(0.2, 2.4, Nev);

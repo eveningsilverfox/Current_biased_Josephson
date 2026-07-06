@@ -20,7 +20,8 @@ using JLD
 #energies
 mu = 0; delta = 1; zeta = 20; Gamma = 1e-2;
 nT = 100; Tar = zeta .* range(0.02, 1.0, nT);
-dw1 = Gamma/5; wmax = 1*zeta; Nw1 = trunc(Int, 2*wmax/dw1); war1 = range(-wmax, wmax, Nw1); #Converges rapidly as wmax increases over delta.
+dw1 = Gamma/5; wmax = 1*zeta; #Converges rapidly as wmax increases over delta.
+Nw1 = 2*ceil(Int, wmax/dw1); war1 = -wmax .+ ((0:Nw1-1) .+ 0.5) .* (2*wmax/Nw1); # even-count midpoint sampling: PH-symmetric, no sample on the T=0 step at w=0
 
 #classical-spin impurities (units of Delta): J = (Jx,Jy,Jz) exchange, K potential
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 I(phi))

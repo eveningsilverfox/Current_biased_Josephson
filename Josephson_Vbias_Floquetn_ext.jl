@@ -78,8 +78,8 @@ for hi = 1:Nev
     println("evct/Nev = $(hi)/$(Nev)")
 
     ev = evar[hi]; Omega = ev;
-    Nw0 = trunc(Int, abs(Omega)/dw0);
-    war0 = -0.5*abs(Omega) .+ range(0, (Nw0-1)*abs(Omega)/Nw0, Nw0);
+    Nw0 = 2*ceil(Int, abs(Omega)/(2*dw0));                             # even cell count: PH-symmetric midpoint sampling
+    war0 = -0.5*abs(Omega) .+ ((0:Nw0-1) .+ 0.5) .* (abs(Omega)/Nw0);  # midpoint rule: no sample on the T=0 occupation step
 
     If[hi,:,:] = Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi);
 
