@@ -2341,7 +2341,7 @@ end
 
 """
     phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma,
-             JL, KL, JR, KR, Vipsolseed=nothing) -> (Iv, Vipsol, residualarr)
+             JL, KL, JR, KR) -> (Iv, Vipsol, residualarr)
 
 Main current-bias driver for the 4x4 Nambu(x)spin (YSR) module. For each bias eV in
 `evar` (swept high->low with continuation), solves the self-consistency F(x)=0 with
@@ -2350,10 +2350,7 @@ Per-lead classical-spin impurities are `JL,KL` (left) and `JR,KR` (right). Only 
 exact-Dyson scheme `ws=0` is supported; perturbative schemes are not yet ported.
 
 Seeding: the largest-|V| point uses the trivial seed and every lower point continues from
-its neighbour. `Vipsolseed` does NOT enter the direct solves -- it is used only as the
-stage-1 seed of the homotopy rescue (see below), so it is ignored unless
-`max_scansteps > 0`. When supplied it must be an `Nev x 4Nf` array aligned to `evar`
-(row `hi` <-> `evar[hi]`), e.g. the saved, well-converged KL=KR=0 run on the same grid.
+its neighbour.
 
 Keyword arguments `ftols` (1e-12), `xtols` (1e-10), `itermax` (40) override the nlsolve
 exit criteria, e.g. a larger `itermax` for diagnostic runs where the trust-region crawl
@@ -2361,26 +2358,47 @@ needs more than 40 iterations to traverse an ill-conditioned stretch; `max_scans
 `tol_accept` (1e-9), `itermax_scan` (100) control rescue mode. Being keywords, they can
 be supplied by name in any order, e.g. `phisolve(...; itermax = 60, max_scansteps = 10)`.
 
-Rescue mode (`max_scansteps > 0`, ws=0, requires `Vipsolseed`): whenever a bias point
-misses `tol_accept`, it is re-solved by a K-homotopy at fixed V -- ramp `KL,KR` to their
-full values in `max_scansteps` stages (`KL*st/max_scansteps`) from 0, chaining seeds. If the 
-final stage still misses `tol_accept` the bias point is abandoned (`Iv` left 0, direct residual 
-kept). Each stage gets `itermax_scan` iterations. Since the sweep continues from the last
-stored solution, a successful rescue re-arms continuation for the next point (ramps
-typically fire only at entry into the hard band); after a failed rescue the next point
-inherits the unconverged continuation seed and its own rescue catches it.
+Row equilibration (`scale_current = true`): the current-nulling rows `2Nf+1:4Nf` of both
+`F` and its Jacobian are multiplied by the normal-state resistance `RN` (from
+[`RN_full`](@ref)) so they become O(Delta) like the unitarity/gauge rows -- since
+`Ic*RN ~ O(Delta)` the raw current rows scale as `Ic ~ Delta/RN` and would otherwise be
+neglected by the trust-region step. Scaling rows by a nonzero constant leaves the root
+unchanged; it only reconditions the solve. Set `scale_current = false` to recover the raw,
+unscaled system (A/B comparison). NOTE: with scaling on, `residualarr` (and the nlsolve
+`ftol`/`tol_accept` tests) are measured in the *scaled* metric.
+
+Rescue mode (`max_scansteps > 0`, ws=0): whenever a bias point misses `tol_accept`, it is
+re-solved by a Gamma-homotopy at fixed V -- geometrically ramp the Dynes broadening from
+`Gam0` (large: subgap MAR/YSR resonances smeared, the branch is smooth and easy) down to
+the physical `Gamma` in `max_scansteps` stages, the LAST stage being at the physical
+`Gamma`, chaining seeds and starting from the continuation seed. Large Gamma damps out
+the sharp resonances that likely make the solution hard to reach. After a failed rescue the
+next point inherits the unconverged continuation seed and its own rescue catches it.
+`Gam0` (default 2e-1) sets the homotopy start.
 
 # Returns
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
-function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipsolseed = nothing;
-                  ftols = 1e-16, xtols = 1e-13, itermax = 60, max_scansteps = 0, tol_accept = 1e-9, itermax_scan = 100)
+function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
+                  ftols = 1e-16, xtols = 1e-13, itermax = 60, max_scansteps = 0, tol_accept = 1e-9, itermax_scan = 100, scale_current = true, Gam0 = 2e-1)
     Nev = length(evar);
 
     If = zeros(ComplexF64, Nev,2*Nf+1,2*Nf+1); Ifa = zeros(ComplexF64, Nev,4*Nf+1); Iv = zeros(Float64, Nev);
     Vipsol = zeros(Float64, Nev, 2*(2*Nf)); #(2*Nf) real + (2*Nf) imag, only odd multiples of eV kept
     Vipseed = zeros(Float64, 2*(2*Nf));
     residualarr = zeros(Float64, Nev);
+
+    #--Current-row equilibration------------------------------------------------------------
+    # Residual rows 2Nf+1:4Nf are the AC current-nulling equations I_{2h}=0; their natural
+    # scale is the Josephson current Ic ~ Delta/RN (Ic*RN ~ O(Delta), Ambegaokar-Baratoff),
+    # whereas the unitarity/gauge rows 1:2Nf are already O(1). Multiplying the current rows
+    # AND their Jacobian rows by RN lifts them to O(Delta), so the trust-region step no longer
+    # neglects the (otherwise ~1/RN-small) current residuals. Scaling rows by a nonzero
+    # constant leaves the root unchanged -- it only reconditions the solve. RN is independent
+    # of eV and of the unknowns, so it is computed once for the whole sweep.
+    RN = scale_current ? Keldyshsetup_Floquetn_ext.RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR) : 1.0;
+    rowscale = ones(Float64, 4*Nf); rowscale[(2*Nf+1):(4*Nf)] .= RN;
+    println("-- current-row equilibration: RN = $RN, scale_current = $scale_current")
 
     for hi = Nev:-1:1
         println("ev iter = ",hi)
@@ -2389,32 +2407,30 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vips
         Nw0 = 2*ceil(Int, abs(Omega)/(2*dw0));                             # even cell count: PH-symmetric midpoint sampling
         war0 = -0.5*abs(Omega) .+ ((0:Nw0-1) .+ 0.5) .* (abs(Omega)/Nw0);  # midpoint rule: no sample on the T=0 occupation step
 
+        # active-ws residual/Jacobian for this bias point, and their row-equilibrated forms (Fs,Js)
+        Fraw = ws == 4 ? (x -> Keldyshsetup_Floquetn_ext.IbiasResidual_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
+               ws == 2 ? (x -> Keldyshsetup_Floquetn_ext.IbiasResidual_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
+                         (x -> Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
+        Jraw = ws == 4 ? (x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
+               ws == 2 ? (x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
+                         (x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
+        Fs = x -> rowscale .* Fraw(x);   # row-scaled residual (current rows * RN)
+        Js = x -> rowscale .* Jraw(x);   # row-scaled Jacobian  (current rows * RN)
+
         if hi == Nev
             Vipseed[Nf] = 1;               # default: trivial seed at the largest |V|
         else
             Vipseed .= Vipsol[hi+1,:];     # default: continuation from the adjacent bias point
         end
 
-        if ws == 4
-            fvalue = norm(Keldyshsetup_Floquetn_ext.IbiasResidual_T4(Vipseed, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
-        elseif ws == 2
-            fvalue = norm(Keldyshsetup_Floquetn_ext.IbiasResidual_T2(Vipseed, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
-        elseif ws == 0
-            fvalue = norm(Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(Vipseed, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
-        end
+        fseed = Fraw(Vipseed); fvalue = norm(rowscale .* fseed);   # scaled seed residual for the skip test
 
         if fvalue < ftols # seed from higher bias point already satisfies the tolerance, skip the nlsolve
             Vipsol[hi,:] = Vipseed;
             residualarr[hi] = fvalue;
         else # seed from higher bias point does not satisfy the tolerance, run the solver
             t0 = time()
-            if ws == 4
-                res = nlsolve(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
-            elseif ws == 2
-                res = nlsolve(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
-            elseif ws == 0
-                res = nlsolve(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
-            end
+            res = nlsolve(Fs, Js, Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
             t1 = time()
             println("time = ",t1-t0)
             Vipsol[hi,:] = res.zero;
@@ -2422,23 +2438,21 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vips
         end
 
         #--Homotopy rescue (max_scansteps > 0, ws=0 only): the direct solve missed tol_accept, so
-        #  re-solve at fixed V ramping the impurity potentials KL,KR from ~0 to their full values
-        #  in max_scansteps stages, chaining seeds. Stage 1 seeds from the per-voltage external
-        #  seed (recommended: the KL=KR=0 solution at this V), matching the validated KL scans.
-        if max_scansteps > 0 && Vipsolseed !== nothing && residualarr[hi] > tol_accept && ws == 0
+        #  re-solve at fixed V by a Gamma-homotopy -- geometrically ramp the Dynes broadening from
+        #  Gam0 (large: subgap MAR/YSR resonances smeared, branch smooth) down to the physical Gamma
+        #  in max_scansteps stages (LAST stage = physical Gamma), chaining seeds from the continuation seed.
+        if max_scansteps > 0 && residualarr[hi] > tol_accept && ws == 0
             println("-- Homotopy rescue at ev iter = $hi (direct residual = $(residualarr[hi]))")
-            println("   Reusing the solution at KL=KR=0 and ramping KL,KR to their full values in $max_scansteps stages")
-            # Use provided seed (KL=KR=0) if available, else the default seed (solution at previous bias point)
-            seedh = Vipsolseed !== nothing ? Vector{Float64}(Vipsolseed[hi,:]) : copy(Vipseed);
+            println("   Gamma-homotopy $Gam0 -> $Gamma over $max_scansteps stages (last stage at the physical Gamma)")
+            seedh = copy(Vipseed);       # start from the continuation seed
             resnormh = NaN;
             for st = 1:max_scansteps
-                KLs = KL*(st/max_scansteps); KRs = KR*(st/max_scansteps); # ramp the impurity potentials
-                println("   scanstep $st/$max_scansteps : KL = $KLs, KR = $KRs")
-                resh = nlsolve(x -> Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KLs, JR, KRs, hi), x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KLs, JR, KRs, hi), seedh, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax_scan);
+                # geometric ramp: stage 1 = Gam0, stage max_scansteps = Gamma (physical)
+                Gammas = max_scansteps == 1 ? Gamma : Gam0 * (Gamma/Gam0)^((st-1)/(max_scansteps-1));
+                println("   scanstep $st/$max_scansteps : Gamma = $Gammas")
+                resh = nlsolve(x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gammas, JL, KL, JR, KR, hi), x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gammas, JL, KL, JR, KR, hi), seedh, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax_scan);
                 seedh = resh.zero; resnormh = resh.residual_norm;
-                if resnormh < tol_accept
-                    println("   scanstep $(st) residual = $(resnormh)")
-                end
+                println("   scanstep $st/$max_scansteps residual = $(resnormh)")
             end
             if resnormh < tol_accept
                 Vipsol[hi,:] = seedh; residualarr[hi] = resnormh;
