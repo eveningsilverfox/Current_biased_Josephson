@@ -2358,14 +2358,17 @@ needs more than 40 iterations to traverse an ill-conditioned stretch; `max_scans
 `tol_accept` (1e-9), `itermax_scan` (100) control rescue mode. Being keywords, they can
 be supplied by name in any order, e.g. `phisolve(...; itermax = 60, max_scansteps = 10)`.
 
-Row equilibration (`scale_current = true`): the current-nulling rows `2Nf+1:4Nf` of both
-`F` and its Jacobian are multiplied by the normal-state resistance `RN` (from
-[`RN_full`](@ref)) so they become O(Delta) like the unitarity/gauge rows -- since
-`Ic*RN ~ O(Delta)` the raw current rows scale as `Ic ~ Delta/RN` and would otherwise be
-neglected by the trust-region step. Scaling rows by a nonzero constant leaves the root
-unchanged; it only reconditions the solve. Set `scale_current = false` to recover the raw,
-unscaled system (A/B comparison). NOTE: with scaling on, `residualarr` (and the nlsolve
-`ftol`/`tol_accept` tests) are measured in the *scaled* metric.
+Row equilibration (`scale_current`, default `false`): when enabled, the current-nulling rows
+`2Nf+1:4Nf` of both `F` and its Jacobian are multiplied by `RN` (from [`RN_full`](@ref)) so
+they become O(Delta) like the unitarity/gauge rows (raw scale `Ic ~ Delta/RN`). This leaves
+the root unchanged (row scaling is exact-Newton invariant), so it cannot create a missing
+root. It DOES change the `:trust_region` PATH, though: the dogleg merit `||D f||^2` has
+gradient `J'D^2 f` skewed by the `RN^2` weighting, so trial steps are rejected and the
+Jacobian is recomputed several times per accepted iteration (~4x the Jacobian evaluations,
+~1.6-3.7x wall-time in tests). That path change may help OR hurt reaching an existing root at
+hard points (empirically TBD), so it is OFF by default (most points converge fine and faster
+unscaled) and kept as an opt-in. With it on, `residualarr` and the `ftol`/`tol_accept` tests
+are in the scaled metric.
 
 Rescue mode (`max_scansteps > 0`, ws=0): whenever a bias point misses `tol_accept`, it is
 re-solved by a Gamma-homotopy at fixed V -- geometrically ramp the Dynes broadening from
@@ -2380,7 +2383,7 @@ next point inherits the unconverged continuation seed and its own rescue catches
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
 function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
-                  ftols = 1e-16, xtols = 1e-13, itermax = 60, max_scansteps = 0, tol_accept = 1e-9, itermax_scan = 100, scale_current = true, Gam0 = 2e-1)
+                  ftols = 1e-16, xtols = 1e-13, itermax = 60, max_scansteps = 0, tol_accept = 1e-9, itermax_scan = 100, scale_current = false, Gam0 = 2e-1)
     Nev = length(evar);
 
     If = zeros(ComplexF64, Nev,2*Nf+1,2*Nf+1); Ifa = zeros(ComplexF64, Nev,4*Nf+1); Iv = zeros(Float64, Nev);
@@ -2388,17 +2391,20 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
     Vipseed = zeros(Float64, 2*(2*Nf));
     residualarr = zeros(Float64, Nev);
 
-    #--Current-row equilibration------------------------------------------------------------
-    # Residual rows 2Nf+1:4Nf are the AC current-nulling equations I_{2h}=0; their natural
-    # scale is the Josephson current Ic ~ Delta/RN (Ic*RN ~ O(Delta), Ambegaokar-Baratoff),
-    # whereas the unitarity/gauge rows 1:2Nf are already O(1). Multiplying the current rows
-    # AND their Jacobian rows by RN lifts them to O(Delta), so the trust-region step no longer
-    # neglects the (otherwise ~1/RN-small) current residuals. Scaling rows by a nonzero
-    # constant leaves the root unchanged -- it only reconditions the solve. RN is independent
-    # of eV and of the unknowns, so it is computed once for the whole sweep.
+    #--Current-row equilibration (OFF by default; opt-in via scale_current=true)-------------
+    # Rows 2Nf+1:4Nf are the current-nulling equations I_{2h}=0 (natural scale Ic ~ Delta/RN);
+    # rows 1:2Nf (unitarity/gauge) are O(1). Multiplying the current rows AND their Jacobian
+    # rows by RN equilibrates them to O(Delta). This does NOT move the root (row scaling is
+    # exact-Newton invariant), so it cannot create a missing root. It DOES change NLsolve's
+    # :trust_region PATH, though: the dogleg merit ||D f||^2 has gradient J'D^2 f skewed by
+    # D^2 (RN^2 on the current rows), so trial steps are rejected and the Jacobian is recomputed
+    # several times per accepted iteration (~4x the Jacobian evals, ~1.6-3.7x wall-time). That
+    # path change CAN alter whether an existing root is reached at hard points -- may help or
+    # hurt, TBD empirically. Default OFF (most points converge fine and faster unscaled); kept
+    # as an opt-in for the hard band. RN is bias- and x-independent (computed once).
     RN = scale_current ? Keldyshsetup_Floquetn_ext.RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR) : 1.0;
     rowscale = ones(Float64, 4*Nf); rowscale[(2*Nf+1):(4*Nf)] .= RN;
-    println("-- current-row equilibration: RN = $RN, scale_current = $scale_current")
+    scale_current && println("-- current-row equilibration ON: RN = $RN (note: inflates Jacobian evals under :trust_region)")
 
     for hi = Nev:-1:1
         println("ev iter = ",hi)
@@ -2414,8 +2420,8 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
         Jraw = ws == 4 ? (x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
                ws == 2 ? (x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
                          (x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
-        Fs = x -> rowscale .* Fraw(x);   # row-scaled residual (current rows * RN)
-        Js = x -> rowscale .* Jraw(x);   # row-scaled Jacobian  (current rows * RN)
+        Fs = scale_current ? (x -> rowscale .* Fraw(x)) : Fraw;   # scale only if opted-in (else zero overhead)
+        Js = scale_current ? (x -> rowscale .* Jraw(x)) : Jraw;
 
         if hi == Nev
             Vipseed[Nf] = 1;               # default: trivial seed at the largest |V|
@@ -2423,7 +2429,7 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
             Vipseed .= Vipsol[hi+1,:];     # default: continuation from the adjacent bias point
         end
 
-        fseed = Fraw(Vipseed); fvalue = norm(rowscale .* fseed);   # scaled seed residual for the skip test
+        fseed = Fraw(Vipseed); fvalue = scale_current ? norm(rowscale .* fseed) : norm(fseed);   # seed residual for the skip test
 
         if fvalue < ftols # seed from higher bias point already satisfies the tolerance, skip the nlsolve
             Vipsol[hi,:] = Vipseed;

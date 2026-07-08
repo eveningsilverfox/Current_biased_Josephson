@@ -54,13 +54,20 @@ tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = rang
 #Scheme (only ws=0 supported in the 4x4 ext module)
 ws = 0;
 
-#Homotopy rescue (phisolve rescue mode; 0 = off). The sweep seeds by plain continuation;
+#Homotopy rescue (phisolve rescue mode; 0 = off).
 #if a bias point misses tol_accept, it is re-solved at fixed V by a Gamma-homotopy: ramp the
 #Dynes broadening from 2e-1 (well-damped, subgap resonances smeared) down to the physical
 #Gamma in max_scansteps stages (last stage = physical Gamma), chaining seeds from the
 #continuation seed. A rescued point re-arms continuation for its neighbour, so ramps
 #typically fire only at entry into the hard band.
 max_scansteps = 5;
+
+#Current-row equilibration (phisolve scale_current). Row-scale the current-nulling equations
+#and their Jacobian rows by RN so all equations are O(Delta). Does NOT move the root; changes
+#the trust-region PATH (may help or hurt reaching the root at hard points) at ~1.6-3.7x the
+#per-point cost (more Jacobian recomputes). Default off; flip on to test whether it converges
+#the low-V band without homotopy. See notes in phisolve.
+scale_current = false;
 
 #naming
 fnum(x) = x isa Integer ? string(x) : replace(string(round(x, sigdigits=4)), "." => "p");   # numeric value -> filename token ('.' -> 'p')
@@ -78,15 +85,15 @@ if signed_evar
 
     # Negative branch: phisolve sweeps last->first, so pass it reversed to start
     # at the most-negative (largest |V|), then undo the reverse.
-    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, max_scansteps = max_scansteps);
+    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, max_scansteps = max_scansteps, scale_current = scale_current);
     Ivn = reverse(Ivn); Vipn = reverse(Vipn, dims=1); resn = reverse(resn);
 
     # Positive branch: identical to the unsigned run.
-    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, max_scansteps = max_scansteps);
+    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, max_scansteps = max_scansteps, scale_current = scale_current);
 
     Iv = [Ivn; Ivp]; Vipsol = [Vipn; Vipp]; residualarr = [resn; resp];
 else
-    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, max_scansteps = max_scansteps)
+    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, max_scansteps = max_scansteps, scale_current = scale_current)
 end
 
 dIdv = zeros(Float64, Nev);
