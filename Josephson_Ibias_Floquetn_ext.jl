@@ -20,7 +20,7 @@ using JLD
 Nf = 30;
 
 #energies
-mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 2e-2;
+mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 5e-2;
 dw0 = minimum([0.015, Gamma/2.0]);
 
 #classical-spin impurities (units of Delta): J=(Jx,Jy,Jz) exchange, K potential
@@ -39,11 +39,11 @@ println("YSR energies E/Δ  | L lead: analytical=$(round.(EYSR_La./delta, digits
 println("                  | R lead: analytical=$(round.(EYSR_Ra./delta, digits=5)) numerical=$(round.(EYSR_Rn./delta, digits=5))")
 
 #voltage
-signed_evar = false;
+signed_evar = true;
 if signed_evar
-    Nev1 = 100; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+    Nev1 = 160; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 else
-    Nev = 100; evar = delta*range(0.24, 3.2, Nev);
+    Nev = 160; evar = delta*range(0.24, 3.2, Nev);
 end
 
 #time (for phase reconstruction)
@@ -64,10 +64,8 @@ max_scansteps = 5;
 
 #Current-row equilibration (phisolve scale_current). Row-scale the current-nulling equations
 #and their Jacobian rows by RN so all equations are O(Delta). Does NOT move the root; changes
-#the trust-region PATH (may help or hurt reaching the root at hard points) at ~1.6-3.7x the
-#per-point cost (more Jacobian recomputes). Default off; flip on to test whether it converges
-#the low-V band without homotopy. See notes in phisolve.
-scale_current = false;
+#the actual convergence path. 
+scale_current = true;
 
 #naming
 fnum(x) = x isa Integer ? string(x) : replace(string(round(x, sigdigits=4)), "." => "p");   # numeric value -> filename token ('.' -> 'p')
