@@ -79,7 +79,7 @@ for st = 1:Nst
     EL = Keldyshsetup_Floquetn_ext.ysr_energies_numerical(JL, KLs, zeta, delta);
     println("eYSR_L/Delta = $(round.(EL./delta, digits=5))")
 
-    Iv1, Vip1, res1 = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, [evfail], Nf, zeta, delta, T, Gamma, JL, KLs, JR, KR, seed, itermax = itermax_scan);
+    Iv1, Vip1, res1 = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, [evfail], Nf, zeta, delta, T, Gamma, JL, KLs, JR, KR, itermax = itermax_scan);
     reslog[st] = res1[1]; Ivlog[st] = Iv1[1]; Vipstages[st,:] = Vip1[1,:];
     @printf("stage KL=%.3f : residual = %.3e   Iv = %.6f   IeRN/Delta = %.4f\n", KLs, res1[1], Iv1[1], Iv1[1]*RN/delta)
 

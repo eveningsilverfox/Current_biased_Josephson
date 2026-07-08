@@ -55,63 +55,18 @@ tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = rang
 ws = 0;
 
 #Homotopy rescue (phisolve rescue mode; 0 = off). The sweep seeds by plain continuation;
-#if a bias point misses tol_accept, it is re-solved at fixed V ramping KL,KR -> full value
-#in max_scansteps stages, stage 1 seeded from the loaded KL=KR=0 solution (use with
-#load_sol = true). A rescued point re-arms continuation for its neighbour, so ramps
+#if a bias point misses tol_accept, it is re-solved at fixed V by a Gamma-homotopy: ramp the
+#Dynes broadening from 2e-1 (well-damped, subgap resonances smeared) down to the physical
+#Gamma in max_scansteps stages (last stage = physical Gamma), chaining seeds from the
+#continuation seed. A rescued point re-arms continuation for its neighbour, so ramps
 #typically fire only at entry into the hard band.
-max_scansteps = 10;
+max_scansteps = 5;
 
 #naming
 fnum(x) = x isa Integer ? string(x) : replace(string(round(x, sigdigits=4)), "." => "p");   # numeric value -> filename token ('.' -> 'p')
 fvec(v) = join(fnum.(v), "-");                                                               # vector value -> components joined by '-'
 str1 = "Nf$(Nf)_Ibias_ext_delta$(fnum(delta))_zeta$(fnum(zeta))_T$(fnum(T))_Gam$(fnum(Gamma))_V$(fnum(first(evar)))_$(fnum(last(evar)))_$(Nev)_JL$(fvec(JL))_KL$(fnum(KL))_JR$(fvec(JR))_KR$(fnum(KR))";
 str2 = "n_" * str1;
-
-## ----------Load seed solution (optional)----------
-# Load a previously-saved Vipsol on the same grid (the well-converged KL=KR=0 symmetric
-# run). It is used ONLY as the stage-1 seed of the homotopy rescue (max_scansteps != 0);
-# the sweep itself seeds by continuation. The loaded run must share Nf, delta, zeta, T,
-# Gamma and the evar grid (range + Nev); only the impurity (JL,KL,JR,KR) differs.
-load_sol = true;
-Vipseed_load = nothing;
-if load_sol
-    JL_load = JL; KL_load = 0.0;   # impurity of the run to load (symmetric: KL=KR=0)
-    JR_load = JR; KR_load = 0.0;
-    str1_load = "Nf$(Nf)_Ibias_ext_delta$(fnum(delta))_zeta$(fnum(zeta))_T$(fnum(T))_Gam$(fnum(Gamma))_V$(fnum(first(evar)))_$(fnum(last(evar)))_$(Nev)_JL$(fvec(JL_load))_KL$(fnum(KL_load))_JR$(fvec(JR_load))_KR$(fnum(KR_load))";
-    str2_load = "n_" * str1_load;
-    fname_load = "Vipsol_" * str2_load * ".jld";
-    if isfile(fname_load)
-        Vipseed_load = load(fname_load, "Vipsol");
-        @assert size(Vipseed_load) == (Nev, 2*(2*Nf)) "loaded Vipsol size $(size(Vipseed_load)) != expected ($(Nev), $(2*(2*Nf))); check Nf / Nev / evar match";
-    else
-        # leave Vipseed_load = nothing: rescue mode then generates the KL=KR=0 seed below;
-        # without rescue mode the run falls back to plain continuation seeding.
-        println("seed file not found: $fname_load")
-        println("-> continuing without a loaded seed" * (max_scansteps != 0 ? " (rescue mode will generate the KL=KR=0 seed first)" : ""))
-    end
-end
-
-## ----------Generate seed solution if missing (rescue mode)----------
-# Rescue mode (max_scansteps != 0) chains its K-homotopy from the KL=KR=0 solution at
-# each voltage, so a per-voltage seed is required. If none was loaded above, solve the
-# symmetric KL=KR=0 case first (plain continuation, converges everywhere), save it under
-# its KL=KR=0 name (reusable via load_sol later), and use it as the seed for the actual
-# run below. Skipped if the actual run IS the symmetric case.
-if max_scansteps != 0 && Vipseed_load === nothing && !(KL == 0 && KR == 0)
-    println("rescue mode: no seed loaded -> solving the KL=KR=0 case first to create it")
-    if signed_evar
-        Nneg = count(<(0), evar);
-        Iv0n, Vip0n, res0n = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evar[1:Nneg]), Nf, zeta, delta, T, Gamma, JL, 0.0, JR, 0.0);
-        Iv0p, Vip0p, res0p = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar[Nneg+1:end], Nf, zeta, delta, T, Gamma, JL, 0.0, JR, 0.0);
-        Vipseed_load = [reverse(Vip0n, dims=1); Vip0p];              # row-aligned to evar
-        Iv0 = [reverse(Iv0n); Iv0p]; res0 = [reverse(res0n); res0p];
-    else
-        Iv0, Vipseed_load, res0 = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, 0.0, JR, 0.0);
-    end
-    str1_seed = "Nf$(Nf)_Ibias_ext_delta$(fnum(delta))_zeta$(fnum(zeta))_T$(fnum(T))_Gam$(fnum(Gamma))_V$(fnum(first(evar)))_$(fnum(last(evar)))_$(Nev)_JL$(fvec(JL))_KL$(fnum(0.0))_JR$(fvec(JR))_KR$(fnum(0.0))";
-    save("Vipsol_n_" * str1_seed * ".jld", "Vipsol", Vipseed_load, "residualarr", res0, "Iv", Iv0);
-    println("saved seed: Vipsol_n_" * str1_seed * ".jld")
-end
 
 ## ----------Self-consistent solve----------
 if signed_evar
@@ -121,22 +76,17 @@ if signed_evar
     Nneg = count(<(0), evar);                          # = Nev1
     evarneg = evar[1:Nneg]; evarpos = evar[Nneg+1:end];
 
-    # Per-voltage seed (loaded OR generated above) sliced to match each branch (the neg
-    # branch is solved on reverse(evarneg), so its seed rows are reversed to stay row-aligned to evar).
-    seedneg = Vipseed_load !== nothing ? reverse(Vipseed_load[1:Nneg, :], dims=1) : nothing;
-    seedpos = Vipseed_load !== nothing ? Vipseed_load[Nneg+1:end, :]             : nothing;
-
     # Negative branch: phisolve sweeps last->first, so pass it reversed to start
     # at the most-negative (largest |V|), then undo the reverse.
-    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, seedneg, itermax = 40, max_scansteps = max_scansteps);
+    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, max_scansteps = max_scansteps);
     Ivn = reverse(Ivn); Vipn = reverse(Vipn, dims=1); resn = reverse(resn);
 
     # Positive branch: identical to the unsigned run.
-    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, seedpos, itermax = 40, max_scansteps = max_scansteps);
+    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, max_scansteps = max_scansteps);
 
     Iv = [Ivn; Ivp]; Vipsol = [Vipn; Vipp]; residualarr = [resn; resp];
 else
-    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, Vipseed_load, itermax = 40, max_scansteps = max_scansteps)
+    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, max_scansteps = max_scansteps)
 end
 
 dIdv = zeros(Float64, Nev);
@@ -185,7 +135,7 @@ end
 RN = Keldyshsetup_Floquetn_ext.RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR);
 
 ## ------------Saving----------------
-save("Vipsol_" * str2 * ".jld", "Vipsol", Vipsol, "residualarr", residualarr, "Iv", Iv);   # seed for load_sol + inputs for the rescue driver
+save("Vipsol_" * str2 * ".jld", "Vipsol", Vipsol, "residualarr", residualarr, "Iv", Iv);   # solved phase harmonics + residuals + I-V
 # save("IV_Ibias_" * str2 * ".jld", "Iv", Iv);
 
 ## ----------Plots----------
