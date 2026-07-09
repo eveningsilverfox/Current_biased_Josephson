@@ -17,7 +17,7 @@ using JLD
 # ---------------------------------------------------------------------------
 
 #size
-Nf = 30;
+Nf = 24;
 
 #energies
 mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 5e-2;
@@ -27,8 +27,8 @@ dw0 = minimum([0.015, Gamma/2.0]);
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 self-consistent I-V)
 #  collinear YSR:        JL=JR=[0,0,Jz]
 #  non-collinear/diode:  rotate JR vs JL, e.g. JR=Jz*[sin(th),0,cos(th)]
-JL = [0.0, 0.0, 4.0]; KL = 0.1;
-JR = [0.0, 0.0, 4.0]; KR = 0.0;
+JL = [0.0, 1.0, 5.0]; KL = 0.5;
+JR = [0.0, 0.0, 4.0]; KR = 0.5;
 
 #YSR bound-state energies (in-gap poles of each lead's impurity-dressed surface GF)
 EYSR_La = Keldyshsetup_Floquetn_ext.ysr_energies_analytical(JL, KL, zeta, delta);
