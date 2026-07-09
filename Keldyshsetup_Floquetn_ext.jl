@@ -2383,7 +2383,7 @@ next point inherits the unconverged continuation seed and its own rescue catches
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
 function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
-                  ftols = 1e-16, xtols = 1e-13, itermax = 60, max_scansteps = 0, tol_accept = 1e-9, itermax_scan = 100, scale_current = false, Gam0 = 2e-1)
+                  ftols = 1e-16, xtols = 1e-13, itermax = 60, max_scansteps = 0, tol_accept = 1e-12, itermax_scan = 300, scale_current = false, Gam0 = 2e-1)
     Nev = length(evar);
 
     If = zeros(ComplexF64, Nev,2*Nf+1,2*Nf+1); Ifa = zeros(ComplexF64, Nev,4*Nf+1); Iv = zeros(Float64, Nev);
