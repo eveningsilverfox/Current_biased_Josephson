@@ -16,8 +16,9 @@ using JLD
 # demanding that only DC current flows (I_{2h}=0). Exact-Dyson scheme (ws=0) only.
 # ---------------------------------------------------------------------------
 
-#size
-Nf = 24;
+#size (Nf is the MAXIMUM Floquet support; phisolve starts at Nf_start and grows toward Nf as the
+#      phase spectrum widens at low |V|. Raise Nf for deeper low-|V| resolution, at rising cost.)
+Nf = 64;
 
 #energies
 mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 5e-2;
@@ -27,7 +28,7 @@ dw0 = minimum([0.015, Gamma/2.0]);
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 self-consistent I-V)
 #  collinear YSR:        JL=JR=[0,0,Jz]
 #  non-collinear/diode:  rotate JR vs JL, e.g. JR=Jz*[sin(th),0,cos(th)]
-JL = [0.0, 0.0, 5.0]; KL = 0.4;
+JL = [0.0, 0.0, 3.0]; KL = 0.4;
 JR = [0.0, 0.0, 0.0]; KR = 0.0;
 
 #YSR bound-state energies (in-gap poles of each lead's impurity-dressed surface GF)
@@ -54,13 +55,12 @@ tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = rang
 #Scheme (only ws=0 supported in the 4x4 ext module)
 ws = 0;
 
-#Adaptive voltage-homotopy rescue (phisolve; vramp_maxdepth = 0 turns it off).
-#if a bias point misses tol_accept, it is re-reached by bias continuation at the physical Gamma:
-#march from the last converged point to the failed bias in adaptive sub-steps (halve on a failed
-#sub-solve, double on success), refining only where the branch is hard. Every sub-solve is a real
-#physical solution, so successes chain (no failed-point cascade). The smallest sub-step is
-#dVgrid / 2^vramp_maxdepth; below it a fold is presumed and the point is left as a failure record.
-vramp_maxdepth = 6;
+#Adaptive Floquet support (phisolve). The phase spectrum widens as |V| falls, so phisolve starts at
+#Nf_start at the largest |V| and, sweeping down, begins each point at the previous converged support
+#(non-decreasing) and grows Nf in steps of 2 -- up to the ceiling Nf above -- whenever the solve
+#misses tol_accept OR the converged spectrum still has weight at the cutoff (edge/peak > edge_tol).
+Nf_start = 20;      # Floquet support at the largest |V| (grows toward low |V|)
+edge_tol = 1e-3;    # grow Nf until |W| at the cutoff is below this fraction of the peak
 
 #Current-row equilibration (phisolve scale_current). Row-scale the current-nulling equations
 #and their Jacobian rows by RN so all equations are O(Delta). Does NOT move the root; changes
@@ -83,15 +83,15 @@ if signed_evar
 
     # Negative branch: phisolve sweeps last->first, so pass it reversed to start
     # at the most-negative (largest |V|), then undo the reverse.
-    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, vramp_maxdepth = vramp_maxdepth, scale_current = scale_current);
+    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current);
     Ivn = reverse(Ivn); Vipn = reverse(Vipn, dims=1); resn = reverse(resn);
 
     # Positive branch: identical to the unsigned run.
-    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, vramp_maxdepth = vramp_maxdepth, scale_current = scale_current);
+    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current);
 
     Iv = [Ivn; Ivp]; Vipsol = [Vipn; Vipp]; residualarr = [resn; resp];
 else
-    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, vramp_maxdepth = vramp_maxdepth, scale_current = scale_current)
+    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current)
 end
 
 dIdv = zeros(Float64, Nev);

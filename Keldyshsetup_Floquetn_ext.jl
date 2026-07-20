@@ -2340,6 +2340,47 @@ function Vt(Vipi, Nf, tar0, Omega)
 end
 
 """
+    embed_seed(x, Nf_from, Nf_to) -> Vector{Float64}
+
+Zero-pad a packed phase-harmonic solution `x` (length `4*Nf_from`) into a wider `Nf_to` window
+(length `4*Nf_to`, `Nf_to >= Nf_from`). Harmonic `m` sits at index `Nf + (m+1)/2`, so both the real
+and imaginary blocks shift by `Nf_to - Nf_from` (staying centred on the fundamental) and the new
+outer harmonics are zero. Used to continue a solution as the Floquet support grows.
+"""
+function embed_seed(x, Nf_from, Nf_to)
+    if Nf_to == Nf_from
+        # # nothing to widen, return a copy
+        return copy(x)
+    end
+    y = zeros(Float64, 4*Nf_to)
+    d = Nf_to - Nf_from
+    # x = [2*Nf real parts ; 2*Nf imag parts], with harmonic m stored at index Nf+(m+1)/2, so the
+    # array is centered on the fundamental. Widening the window shifts every harmonic right by d in
+    # both blocks (fundamental stays central), the new outer high-|m| slots are left at zero.
+    @views y[(1+d):(2*Nf_from+d)]                 .= x[1:(2*Nf_from)]               # real block, shifted by d
+    @views y[(2*Nf_to+1+d):(2*Nf_to+2*Nf_from+d)] .= x[(2*Nf_from+1):(4*Nf_from)]   # imag block, shifted by d
+    return y
+end
+
+"""
+    edgepeak(x, Nf) -> Float64
+
+Fraction of phase-harmonic weight sitting at the Floquet cutoff,
+`max(|W_{-(2Nf-1)}|, |W_{+(2Nf-1)}|) / max_m |W_m|`, for a packed solution `x` (length `4*Nf`).
+Small means the spectrum has decayed inside the window; O(0.1) means it has outgrown it.
+"""
+function edgepeak(x, Nf)
+    pk = 0.0
+    for jk in 1:2*Nf
+        w = norm((x[jk], x[2*Nf+jk]))
+        if w > pk 
+            pk = w
+        end
+    end
+    return max(norm((x[1], x[2*Nf+1])), norm((x[2*Nf], x[4*Nf]))) / pk
+end
+
+"""
     phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma,
              JL, KL, JR, KR) -> (Iv, Vipsol, residualarr)
 
@@ -2350,12 +2391,12 @@ Per-lead classical-spin impurities are `JL,KL` (left) and `JR,KR` (right). Only 
 exact-Dyson scheme `ws=0` is supported; perturbative schemes are not yet ported.
 
 Seeding: the largest-|V| point uses the trivial seed and every lower point continues from the
-most recent converged point (the continuation anchor).
+previous converged solution, zero-padded into the current Floquet window via [`embed_seed`](@ref).
 
 Keyword arguments `ftols` (1e-16), `xtols` (1e-13), `itermax` (60) override the nlsolve exit
-criteria. Rescue mode is controlled by `vramp_maxdepth` (6; 0 = off), `vramp_itermax` (100) and
-`vramp_solvecap` (200); `tol_accept` (1e-12) is the residual below which a point counts as
-converged. Being keywords, they can be supplied by name in any order.
+criteria; `tol_accept` (1e-12) is the residual below which a point counts as converged. Adaptive
+Floquet support is controlled by `Nf_start` (20, the support at the largest |V|) and `edge_tol`
+(1e-3); the positional `Nf` is the CEILING (maximum support). Keywords can be given in any order.
 
 Row equilibration (`scale_current`, default `false`): when enabled, the current-nulling rows
 `2Nf+1:4Nf` of both `F` and its Jacobian are multiplied by `RN` (from [`RN_full`](@ref)) so
@@ -2369,49 +2410,43 @@ hard points (empirically TBD), so it is OFF by default (most points converge fin
 unscaled) and kept as an opt-in. With it on, `residualarr` and the `ftol`/`tol_accept` tests
 are in the scaled metric.
 
-Rescue mode (`vramp_maxdepth > 0`, ws=0): whenever a bias point misses `tol_accept`, it is
-re-reached by an ADAPTIVE VOLTAGE HOMOTOPY at the physical `Gamma` -- bias continuation from
-the last converged point to `evar[hi]` in adaptive sub-steps (halve the sub-step on a failed
-sub-solve, double it on success), refining the coarse grid step only where it overshot the
-Newton basin. Every sub-solve is a real physical solution at a real bias, so a rescued point
-cleanly seeds the next (successes chain; no failed-point cascade). The smallest sub-step is
-`dVgrid / 2^vramp_maxdepth` (`dVgrid` = grid spacing); below it a fold is presumed and the
-point is left as a failure record (`Iv` stays 0, anchor untouched). `vramp_itermax` caps the
-Newton iterations per sub-solve, `vramp_solvecap` the sub-solves per grid point.
+Adaptive Floquet support (ws=0): the phase spectrum widens as |V| falls, so the number of Floquet
+harmonics needed grows toward low bias. Each point begins at the PREVIOUS converged support
+(non-decreasing down the sweep, starting from `Nf_start`) and `Nf` is increased in steps of 2 --
+re-seeding by zero-padding the previous solution ([`embed_seed`](@ref)) -- whenever the solve misses
+`tol_accept` OR the converged spectrum still carries weight at the cutoff ([`edgepeak`](@ref) >
+`edge_tol`, i.e. the window is too narrow), up to the ceiling `Nf`. At the ceiling a residual-converged
+but under-resolved point is kept (with a warning); a point that still misses `tol_accept` is left as a
+failure record (`Iv` stays 0). Solutions are returned zero-padded to the ceiling width.
 
 # Returns
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
 function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
                   ftols = 1e-16, xtols = 1e-13, itermax = 60, tol_accept = 1e-12, scale_current = false,
-                  vramp_maxdepth = 6, vramp_itermax = 100, vramp_solvecap = 200)
-    Nev = length(evar);
+                  Nf_start = 20, edge_tol = 1e-3)
+    Nfmax = Nf;                          # the positional `Nf` is the ceiling on the adaptive Floquet support
+    Nf_start = min(Nf_start, Nfmax);     
 
-    If = zeros(ComplexF64, Nev,2*Nf+1,2*Nf+1); Ifa = zeros(ComplexF64, Nev,4*Nf+1); Iv = zeros(Float64, Nev);
-    Vipsol = zeros(Float64, Nev, 2*(2*Nf)); #(2*Nf) real + (2*Nf) imag, only odd multiples of eV kept
-    Vipseed = zeros(Float64, 2*(2*Nf));
+    Nev = length(evar);    
+    Iv = zeros(Float64, Nev);
+    Vipsol = zeros(Float64, Nev, 2*(2*Nfmax));   # (2Nf real)+(2Nf imag); stored zero-padded to the ceiling width
     residualarr = zeros(Float64, Nev);
+    Nfused = zeros(Int, Nev);                    # Floquet support actually used at each bias point (for the log)
 
-    #--Current-row equilibration (OFF by default; opt-in via scale_current=true)-------------
-    # Rows 2Nf+1:4Nf are the current-nulling equations I_{2h}=0 (natural scale Ic ~ Delta/RN);
-    # rows 1:2Nf (unitarity/gauge) are O(1). Multiplying the current rows AND their Jacobian
-    # rows by RN equilibrates them to O(Delta). This does NOT move the root (row scaling is
-    # exact-Newton invariant), so it cannot create a missing root. It DOES change NLsolve's
-    # :trust_region PATH, though: the dogleg merit ||D f||^2 has gradient J'D^2 f skewed by
-    # D^2 (RN^2 on the current rows), so trial steps are rejected and the Jacobian is recomputed
-    # several times per accepted iteration (~4x the Jacobian evals, ~1.6-3.7x wall-time). That
-    # path change CAN alter whether an existing root is reached at hard points -- may help or
-    # hurt, TBD empirically. Default OFF (most points converge fine and faster unscaled); kept
-    # as an opt-in for the hard band. RN is bias- and x-independent (computed once).
-    RN = scale_current ? Keldyshsetup_Floquetn_ext.RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR) : 1.0;
-    rowscale = ones(Float64, 4*Nf); rowscale[(2*Nf+1):(4*Nf)] .= RN;
-    scale_current && println("-- current-row equilibration ON: RN = $RN (note: inflates Jacobian evals under :trust_region)")
+    #--Current-row equilibration (opt-in via scale_current). RN row-scales the current-nulling rows
+    # 2Nf+1:4Nf (natural scale Ic~Delta/RN) up to O(Delta) like the unitarity/gauge rows; it leaves the
+    # root unchanged (row scaling is exact-Newton invariant) but changes the trust-region path. RN is
+    # ~Nf-independent (normal-state), so it is computed once at the ceiling; `rowscale` is rebuilt at the
+    # trial support inside the loop.
+    RN = scale_current ? Keldyshsetup_Floquetn_ext.RN_full(Nfmax, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR) : 1.0;
+    scale_current && println("-- current-row equilibration ON: RN = $RN")
 
-    # Continuation anchor: the most recent CONVERGED grid point (bias V_anchor, solution x_anchor).
-    # It seeds every solve and the voltage-homotopy rescue; a failed point leaves it untouched, so a
-    # non-solution is never handed forward (no failed-point cascade). dVgrid is the grid bias step.
-    have_anchor = false; V_anchor = 0.0; x_anchor = zeros(Float64, 2*(2*Nf));
-    dVgrid = Nev >= 2 ? abs(evar[2] - evar[1]) : abs(evar[1]);
+    # Adaptive Floquet support: the Floquet spectrum/support widens as |V| falls, so we must increase Nf at
+    # low bias. Start at Nf_start (largest |V|), for each lower-|V| point begin at the previous converged
+    # support and grow Nf_try by 2 whenever the solve misses tol_accept or the converged Floquet spectrum 
+    # still has weight at the cutoff (edgepeak > edge_tol). Floquet modes Nf_try capped at Nfmax.
+    have_prev = false; xprev = Float64[]; Nfprev = Nf_start;
 
     for hi = Nev:-1:1
         println("ev iter = ",hi)
@@ -2420,113 +2455,73 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
         Nw0 = 2*ceil(Int, abs(Omega)/(2*dw0));                             # even cell count: PH-symmetric midpoint sampling
         war0 = -0.5*abs(Omega) .+ ((0:Nw0-1) .+ 0.5) .* (abs(Omega)/Nw0);  # midpoint rule: no sample on the T=0 occupation step
 
-        # active-ws residual/Jacobian for this bias point, and their row-equilibrated forms (Fs,Js)
-        Fraw = ws == 4 ? (x -> Keldyshsetup_Floquetn_ext.IbiasResidual_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
-               ws == 2 ? (x -> Keldyshsetup_Floquetn_ext.IbiasResidual_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
-                         (x -> Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
-        Jraw = ws == 4 ? (x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
-               ws == 2 ? (x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
-                         (x -> Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
-        Fs = scale_current ? (x -> rowscale .* Fraw(x)) : Fraw;   # scale only if opted-in (else zero overhead)
-        Js = scale_current ? (x -> rowscale .* Jraw(x)) : Jraw;
-
-        if !have_anchor
-            Vipseed .= 0.0; Vipseed[Nf] = 1;   # trivial seed at the largest |V| (first point)
-        else
-            Vipseed .= x_anchor;               # continue from the most recent converged point
-        end
-
-        fseed = Fraw(Vipseed); fvalue = scale_current ? norm(rowscale .* fseed) : norm(fseed);   # seed residual for the skip test
-
-        if fvalue < ftols # seed from higher bias point already satisfies the tolerance, skip the nlsolve
-            Vipsol[hi,:] = Vipseed;
-            residualarr[hi] = fvalue;
-        else # seed from higher bias point does not satisfy the tolerance, run the solver
-            t0 = time()
-            res = nlsolve(Fs, Js, Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
-            t1 = time()
-            println("time = ",t1-t0)
-            Vipsol[hi,:] = res.zero;
-            residualarr[hi] = res.residual_norm;
-        end
-
-        #--Adaptive voltage-homotopy rescue (vramp_maxdepth > 0, ws=0 only): the direct grid step
-        #  overshot the Newton basin. Re-reach the solution by BIAS continuation at the physical
-        #  Gamma -- march from the last converged point (V_anchor, x_anchor) to evar[hi] in adaptive
-        #  sub-steps: halve the sub-step on a failed sub-solve, double it on success (step-doubling),
-        #  refining only where the branch is hard. Every sub-solve is a real physical solution, so a
-        #  rescued point cleanly seeds the next (no failed-point cascade). Floor sub-step is
-        #  dVgrid / 2^vramp_maxdepth; below it a fold is presumed and the point is left failed.
-        if vramp_maxdepth > 0 && residualarr[hi] > tol_accept && ws == 0 && have_anchor
-            println("-- Voltage-homotopy rescue at ev iter = $hi (direct residual = $(residualarr[hi]))")
-            println("   bias continuation eV: $V_anchor -> $(evar[hi]) at the physical Gamma = $Gamma")
-            span   = evar[hi] - V_anchor;                    # signed interval anchor -> target grid point
-            hfloor = dVgrid / 2.0^vramp_maxdepth;            # smallest allowed sub-step (absolute bias)
-            lam = 0.0; xcur = copy(x_anchor); resnormv = NaN;
-            dlam = min(0.5*dVgrid/abs(span), 1.0);           # first sub-step ~ half a grid step (full step already failed)
-            nsolve = 0; ok = false;
-            while true
-                lamt = min(lam + dlam, 1.0);
-                Vt   = V_anchor + lamt*span;                 # off-grid trial bias
-                Omt  = Vt;                                   # rebuild the frequency grid at the trial bias
-                Nwt  = 2*ceil(Int, abs(Omt)/(2*dw0));
-                wart = -0.5*abs(Omt) .+ ((0:Nwt-1) .+ 0.5) .* (abs(Omt)/Nwt);
-                resv = nlsolve(x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, wart, Omt, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, wart, Omt, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), xcur, show_trace=false, method = :trust_region, ftol = ftols; xtol = xtols, iterations = vramp_itermax);
-                nsolve += 1; resnormv = resv.residual_norm;
-                if resnormv < tol_accept
-                    lam = lamt; xcur = resv.zero;            # ACCEPT: advance along the interval
-                    println("   sub-solve $nsolve: eV = $(round(Vt, digits=6)) (lam = $(round(lam, digits=4))) OK, residual = $resnormv")
-                    if lam >= 1.0
-                        ok = true; break                     # landed exactly on evar[hi]
-                    end
-                    dlam = min(2*dlam, 1.0 - lam);           # step-doubling toward the target
-                else
-                    dlam /= 2;                               # REJECT: refine the sub-step
-                    println("   sub-solve $nsolve: eV = $(round(Vt, digits=6)) FAILED, residual = $resnormv -> halve to dlam = $(round(dlam, digits=6))")
-                    if dlam*abs(span) < hfloor
-                        println("   sub-step below floor $hfloor (possible fold); giving up"); break
-                    end
-                end
-                if nsolve >= vramp_solvecap
-                    println("   sub-solve cap $vramp_solvecap reached; giving up"); break
-                end
-            end
-            if ok
-                Vipsol[hi,:] = xcur; residualarr[hi] = resnormv;
-                println("-- Voltage-homotopy rescue SUCCEEDED at ev iter = $hi (residual = $resnormv, $nsolve sub-solves)")
+        # ---- Adaptive Floquet support: grow Nf until the solve converges AND the spectrum fits ----
+        # Start at the previous converged support (>= rule); grow by 2 -- re-seeding by zero-padding the
+        # previous solution -- whenever the residual misses tol_accept or the spectrum still hits the cutoff.
+        Nf_try = have_prev ? Nfprev : Nf_start
+        xacc = Float64[] # accepted solution
+        racc = NaN # accepted residual
+        Nf_acc = Nf_try 
+        accepted = false 
+        # resolved = true only when a solve satisfies both criteria: resid < tol_accept and edgepeak < edge_tol
+        # resolved stays false if the point is accepted with resid < tol_accept but edgepeak still above edge_tol, 
+        # i.e., the spectrum is still spilling the cutoff.
+        resolved = false
+        while true
+            if have_prev
+                seed = Keldyshsetup_Floquetn_ext.embed_seed(xprev, Nfprev, Nf_try);   # continuation, zero-padded
             else
-                println("-- Voltage-homotopy rescue FAILED at ev iter = $hi (residual = $resnormv, $nsolve sub-solves); terminating this bias point")
-                continue # keep the direct result as the failure record; Iv stays 0; anchor left untouched
+                seed = zeros(Float64, 2*(2*Nf_try)); seed[Nf_try] = 1.0;  # trivial DC voltage bias seed (m=-1), first point
+            end
+            rowscale = ones(Float64, 4*Nf_try); rowscale[(2*Nf_try+1):(4*Nf_try)] .= RN;
+            Fs = ws == 4 ? (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasResidual_T4(x, war0, Omega, Nf_try, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
+                 ws == 2 ? (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasResidual_T2(x, war0, Omega, Nf_try, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
+                           (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf_try, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
+            Js = ws == 4 ? (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasJacobian_T4(x, war0, Omega, Nf_try, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
+                 ws == 2 ? (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasJacobian_T2(x, war0, Omega, Nf_try, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
+                           (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf_try, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
+
+            t0 = time();
+            res = nlsolve(Fs, Js, seed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
+            resid = res.residual_norm; ep = Keldyshsetup_Floquetn_ext.edgepeak(res.zero, Nf_try);
+            xacc = res.zero; racc = resid; Nf_acc = Nf_try;
+            println("   Nf = $Nf_try : residual = $resid, edge/peak = $(round(ep, sigdigits=3)), time = $(round(time()-t0, digits=2))");
+
+            if resid < tol_accept && ep < edge_tol
+                accepted = true; resolved = true; break  # converged and the spectrum fits the window
+            elseif Nf_try + 2 <= Nfmax
+                Nf_try += 2     # widen the Floquet window and retry
+            else
+                accepted = resid < tol_accept  # residual small, but spectrum still broad and not decaying fast enough
+                break
             end
         end
 
-        # advance the continuation anchor to this newly converged grid point
-        if residualarr[hi] <= tol_accept
-            have_anchor = true; V_anchor = evar[hi]; x_anchor .= @view Vipsol[hi,:];
-        end
+        Vipsol[hi,:] = Keldyshsetup_Floquetn_ext.embed_seed(xacc, Nf_acc, Nfmax);   # store zero-padded to the ceiling width
+        residualarr[hi] = racc
+        Nfused[hi] = Nf_acc
 
-        #find current using solution, verify only DC component present
-        VipI = zeros(ComplexF64, 4*Nf+1);
-        for kl = 1:2*Nf
-            VipI[2*kl] = Vipsol[hi,kl] + im*Vipsol[hi,(2*Nf)+kl];
-        end
-
-        if ws == 4
-            If[hi,:,:] = Keldyshsetup_Floquetn_ext.current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi);
-        elseif ws == 2
-            If[hi,:,:] = Keldyshsetup_Floquetn_ext.current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi);
-        elseif ws == 0
-            If[hi,:,:] = Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi);
-        end
-
-        for kl = -Nf:Nf
-            for lm = -Nf:Nf
-                Ifa[hi,-(kl-lm)+(2*Nf+1)] = Ifa[hi,-(kl-lm)+(2*Nf+1)] + If[hi,-kl+Nf+1,-lm+Nf+1];
+        if accepted
+            # advance the (non-decreasing) support anchor, then find the DC current at the used support
+            have_prev = true; xprev = xacc; Nfprev = Nf_acc;
+            VipI = zeros(ComplexF64, 4*Nf_acc+1);
+            for kl = 1:2*Nf_acc
+                VipI[2*kl] = xacc[kl] + im*xacc[(2*Nf_acc)+kl];
             end
+            Iif = ws == 4 ? Keldyshsetup_Floquetn_ext.current_Floquet_T4(war0, Omega, Nf_acc, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi) :
+                  ws == 2 ? Keldyshsetup_Floquetn_ext.current_Floquet_T2(war0, Omega, Nf_acc, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi) :
+                            Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf_acc, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi);
+            Iv[hi] = real(sum(diag(Iif)));
+            println(resolved ? "-- ev iter $hi converged at Nf = $Nf_acc (residual = $racc)" :
+                               "-- ev iter $hi converged at ceiling Nf = $Nfmax but under-resolved (edge/peak = $(round(Keldyshsetup_Floquetn_ext.edgepeak(xacc, Nf_acc), sigdigits=3)))")
+        else
+            Iv[hi] = NaN;                                          # residual did not converge even at the ceiling
+                                                                   # NaN (not 0) so the IV/dIdV lines break at a gap
+            println("-- ev iter $hi failed at ceiling Nf = $Nfmax (residual = $racc); Iv = NaN")
         end
-
-        Iv[hi] = real(sum(diag(If[hi,:,:])));
     end
+
+    println("-- Nf used per ev iter (index = hi): ", Nfused)
 
     return Iv, Vipsol, residualarr
 end
