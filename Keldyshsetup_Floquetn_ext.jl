@@ -2349,14 +2349,13 @@ Main current-bias driver for the 4x4 Nambu(x)spin (YSR) module. For each bias eV
 Per-lead classical-spin impurities are `JL,KL` (left) and `JR,KR` (right). Only the
 exact-Dyson scheme `ws=0` is supported; perturbative schemes are not yet ported.
 
-Seeding: the largest-|V| point uses the trivial seed and every lower point continues from
-its neighbour.
+Seeding: the largest-|V| point uses the trivial seed and every lower point continues from the
+most recent converged point (the continuation anchor).
 
-Keyword arguments `ftols` (1e-12), `xtols` (1e-10), `itermax` (40) override the nlsolve
-exit criteria, e.g. a larger `itermax` for diagnostic runs where the trust-region crawl
-needs more than 40 iterations to traverse an ill-conditioned stretch; `max_scansteps` (0),
-`tol_accept` (1e-9), `itermax_scan` (100) control rescue mode. Being keywords, they can
-be supplied by name in any order, e.g. `phisolve(...; itermax = 60, max_scansteps = 10)`.
+Keyword arguments `ftols` (1e-16), `xtols` (1e-13), `itermax` (60) override the nlsolve exit
+criteria. Rescue mode is controlled by `vramp_maxdepth` (6; 0 = off), `vramp_itermax` (100) and
+`vramp_solvecap` (200); `tol_accept` (1e-12) is the residual below which a point counts as
+converged. Being keywords, they can be supplied by name in any order.
 
 Row equilibration (`scale_current`, default `false`): when enabled, the current-nulling rows
 `2Nf+1:4Nf` of both `F` and its Jacobian are multiplied by `RN` (from [`RN_full`](@ref)) so
@@ -2370,20 +2369,22 @@ hard points (empirically TBD), so it is OFF by default (most points converge fin
 unscaled) and kept as an opt-in. With it on, `residualarr` and the `ftol`/`tol_accept` tests
 are in the scaled metric.
 
-Rescue mode (`max_scansteps > 0`, ws=0): whenever a bias point misses `tol_accept`, it is
-re-solved by a Gamma-homotopy at fixed V -- geometrically ramp the Dynes broadening from
-`Gam0` (large: subgap MAR/YSR resonances smeared, the branch is smooth and easy) down to
-the physical `Gamma` in `max_scansteps` stages, the LAST stage being at the physical
-`Gamma`, chaining seeds and starting from the continuation seed. Large Gamma damps out
-the sharp resonances that likely make the solution hard to reach. After a failed rescue the
-next point inherits the unconverged continuation seed and its own rescue catches it.
-`Gam0` (default 2e-1) sets the homotopy start.
+Rescue mode (`vramp_maxdepth > 0`, ws=0): whenever a bias point misses `tol_accept`, it is
+re-reached by an ADAPTIVE VOLTAGE HOMOTOPY at the physical `Gamma` -- bias continuation from
+the last converged point to `evar[hi]` in adaptive sub-steps (halve the sub-step on a failed
+sub-solve, double it on success), refining the coarse grid step only where it overshot the
+Newton basin. Every sub-solve is a real physical solution at a real bias, so a rescued point
+cleanly seeds the next (successes chain; no failed-point cascade). The smallest sub-step is
+`dVgrid / 2^vramp_maxdepth` (`dVgrid` = grid spacing); below it a fold is presumed and the
+point is left as a failure record (`Iv` stays 0, anchor untouched). `vramp_itermax` caps the
+Newton iterations per sub-solve, `vramp_solvecap` the sub-solves per grid point.
 
 # Returns
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
 function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
-                  ftols = 1e-16, xtols = 1e-13, itermax = 60, max_scansteps = 0, tol_accept = 1e-12, itermax_scan = 300, scale_current = false, Gam0 = 2e-1)
+                  ftols = 1e-16, xtols = 1e-13, itermax = 60, tol_accept = 1e-12, scale_current = false,
+                  vramp_maxdepth = 6, vramp_itermax = 100, vramp_solvecap = 200)
     Nev = length(evar);
 
     If = zeros(ComplexF64, Nev,2*Nf+1,2*Nf+1); Ifa = zeros(ComplexF64, Nev,4*Nf+1); Iv = zeros(Float64, Nev);
@@ -2406,6 +2407,12 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
     rowscale = ones(Float64, 4*Nf); rowscale[(2*Nf+1):(4*Nf)] .= RN;
     scale_current && println("-- current-row equilibration ON: RN = $RN (note: inflates Jacobian evals under :trust_region)")
 
+    # Continuation anchor: the most recent CONVERGED grid point (bias V_anchor, solution x_anchor).
+    # It seeds every solve and the voltage-homotopy rescue; a failed point leaves it untouched, so a
+    # non-solution is never handed forward (no failed-point cascade). dVgrid is the grid bias step.
+    have_anchor = false; V_anchor = 0.0; x_anchor = zeros(Float64, 2*(2*Nf));
+    dVgrid = Nev >= 2 ? abs(evar[2] - evar[1]) : abs(evar[1]);
+
     for hi = Nev:-1:1
         println("ev iter = ",hi)
 
@@ -2423,10 +2430,10 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
         Fs = scale_current ? (x -> rowscale .* Fraw(x)) : Fraw;   # scale only if opted-in (else zero overhead)
         Js = scale_current ? (x -> rowscale .* Jraw(x)) : Jraw;
 
-        if hi == Nev
-            Vipseed[Nf] = 1;               # default: trivial seed at the largest |V|
+        if !have_anchor
+            Vipseed .= 0.0; Vipseed[Nf] = 1;   # trivial seed at the largest |V| (first point)
         else
-            Vipseed .= Vipsol[hi+1,:];     # default: continuation from the adjacent bias point
+            Vipseed .= x_anchor;               # continue from the most recent converged point
         end
 
         fseed = Fraw(Vipseed); fvalue = scale_current ? norm(rowscale .* fseed) : norm(fseed);   # seed residual for the skip test
@@ -2443,30 +2450,59 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
             residualarr[hi] = res.residual_norm;
         end
 
-        #--Homotopy rescue (max_scansteps > 0, ws=0 only): the direct solve missed tol_accept, so
-        #  re-solve at fixed V by a Gamma-homotopy -- geometrically ramp the Dynes broadening from
-        #  Gam0 (large: subgap MAR/YSR resonances smeared, branch smooth) down to the physical Gamma
-        #  in max_scansteps stages (LAST stage = physical Gamma), chaining seeds from the continuation seed.
-        if max_scansteps > 0 && residualarr[hi] > tol_accept && ws == 0
-            println("-- Homotopy rescue at ev iter = $hi (direct residual = $(residualarr[hi]))")
-            println("   Gamma-homotopy $Gam0 -> $Gamma over $max_scansteps stages (last stage at the physical Gamma)")
-            seedh = copy(Vipseed);       # start from the continuation seed
-            resnormh = NaN;
-            for st = 1:max_scansteps
-                # geometric ramp: stage 1 = Gam0, stage max_scansteps = Gamma (physical)
-                Gammas = max_scansteps == 1 ? Gamma : Gam0 * (Gamma/Gam0)^((st-1)/(max_scansteps-1));
-                println("   scanstep $st/$max_scansteps : Gamma = $Gammas")
-                resh = nlsolve(x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gammas, JL, KL, JR, KR, hi), x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gammas, JL, KL, JR, KR, hi), seedh, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax_scan);
-                seedh = resh.zero; resnormh = resh.residual_norm;
-                println("   scanstep $st/$max_scansteps residual = $(resnormh)")
+        #--Adaptive voltage-homotopy rescue (vramp_maxdepth > 0, ws=0 only): the direct grid step
+        #  overshot the Newton basin. Re-reach the solution by BIAS continuation at the physical
+        #  Gamma -- march from the last converged point (V_anchor, x_anchor) to evar[hi] in adaptive
+        #  sub-steps: halve the sub-step on a failed sub-solve, double it on success (step-doubling),
+        #  refining only where the branch is hard. Every sub-solve is a real physical solution, so a
+        #  rescued point cleanly seeds the next (no failed-point cascade). Floor sub-step is
+        #  dVgrid / 2^vramp_maxdepth; below it a fold is presumed and the point is left failed.
+        if vramp_maxdepth > 0 && residualarr[hi] > tol_accept && ws == 0 && have_anchor
+            println("-- Voltage-homotopy rescue at ev iter = $hi (direct residual = $(residualarr[hi]))")
+            println("   bias continuation eV: $V_anchor -> $(evar[hi]) at the physical Gamma = $Gamma")
+            span   = evar[hi] - V_anchor;                    # signed interval anchor -> target grid point
+            hfloor = dVgrid / 2.0^vramp_maxdepth;            # smallest allowed sub-step (absolute bias)
+            lam = 0.0; xcur = copy(x_anchor); resnormv = NaN;
+            dlam = min(0.5*dVgrid/abs(span), 1.0);           # first sub-step ~ half a grid step (full step already failed)
+            nsolve = 0; ok = false;
+            while true
+                lamt = min(lam + dlam, 1.0);
+                Vt   = V_anchor + lamt*span;                 # off-grid trial bias
+                Omt  = Vt;                                   # rebuild the frequency grid at the trial bias
+                Nwt  = 2*ceil(Int, abs(Omt)/(2*dw0));
+                wart = -0.5*abs(Omt) .+ ((0:Nwt-1) .+ 0.5) .* (abs(Omt)/Nwt);
+                resv = nlsolve(x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, wart, Omt, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, wart, Omt, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi), xcur, show_trace=false, method = :trust_region, ftol = ftols; xtol = xtols, iterations = vramp_itermax);
+                nsolve += 1; resnormv = resv.residual_norm;
+                if resnormv < tol_accept
+                    lam = lamt; xcur = resv.zero;            # ACCEPT: advance along the interval
+                    println("   sub-solve $nsolve: eV = $(round(Vt, digits=6)) (lam = $(round(lam, digits=4))) OK, residual = $resnormv")
+                    if lam >= 1.0
+                        ok = true; break                     # landed exactly on evar[hi]
+                    end
+                    dlam = min(2*dlam, 1.0 - lam);           # step-doubling toward the target
+                else
+                    dlam /= 2;                               # REJECT: refine the sub-step
+                    println("   sub-solve $nsolve: eV = $(round(Vt, digits=6)) FAILED, residual = $resnormv -> halve to dlam = $(round(dlam, digits=6))")
+                    if dlam*abs(span) < hfloor
+                        println("   sub-step below floor $hfloor (possible fold); giving up"); break
+                    end
+                end
+                if nsolve >= vramp_solvecap
+                    println("   sub-solve cap $vramp_solvecap reached; giving up"); break
+                end
             end
-            if resnormh < tol_accept
-                Vipsol[hi,:] = seedh; residualarr[hi] = resnormh;
-                println("-- Homotopy rescue SUCCEEDED at ev iter = $hi (residual = $resnormh)")
+            if ok
+                Vipsol[hi,:] = xcur; residualarr[hi] = resnormv;
+                println("-- Voltage-homotopy rescue SUCCEEDED at ev iter = $hi (residual = $resnormv, $nsolve sub-solves)")
             else
-                println("-- Homotopy rescue FAILED at ev iter = $hi (final residual = $resnormh); terminating this bias point")
-                continue # keep the direct result in Vipsol/residualarr as the failure record; Iv stays 0
+                println("-- Voltage-homotopy rescue FAILED at ev iter = $hi (residual = $resnormv, $nsolve sub-solves); terminating this bias point")
+                continue # keep the direct result as the failure record; Iv stays 0; anchor left untouched
             end
+        end
+
+        # advance the continuation anchor to this newly converged grid point
+        if residualarr[hi] <= tol_accept
+            have_anchor = true; V_anchor = evar[hi]; x_anchor .= @view Vipsol[hi,:];
         end
 
         #find current using solution, verify only DC component present

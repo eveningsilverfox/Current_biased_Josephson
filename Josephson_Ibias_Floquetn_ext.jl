@@ -27,8 +27,8 @@ dw0 = minimum([0.015, Gamma/2.0]);
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 self-consistent I-V)
 #  collinear YSR:        JL=JR=[0,0,Jz]
 #  non-collinear/diode:  rotate JR vs JL, e.g. JR=Jz*[sin(th),0,cos(th)]
-JL = [0.0, 1.0, 5.0]; KL = 0.5;
-JR = [0.0, 0.0, 4.0]; KR = 0.5;
+JL = [0.0, 0.0, 5.0]; KL = 0.4;
+JR = [0.0, 0.0, 0.0]; KR = 0.0;
 
 #YSR bound-state energies (in-gap poles of each lead's impurity-dressed surface GF)
 EYSR_La = Keldyshsetup_Floquetn_ext.ysr_energies_analytical(JL, KL, zeta, delta);
@@ -54,13 +54,13 @@ tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = rang
 #Scheme (only ws=0 supported in the 4x4 ext module)
 ws = 0;
 
-#Homotopy rescue (phisolve rescue mode; 0 = off).
-#if a bias point misses tol_accept, it is re-solved at fixed V by a Gamma-homotopy: ramp the
-#Dynes broadening from 2e-1 (well-damped, subgap resonances smeared) down to the physical
-#Gamma in max_scansteps stages (last stage = physical Gamma), chaining seeds from the
-#continuation seed. A rescued point re-arms continuation for its neighbour, so ramps
-#typically fire only at entry into the hard band.
-max_scansteps = 5;
+#Adaptive voltage-homotopy rescue (phisolve; vramp_maxdepth = 0 turns it off).
+#if a bias point misses tol_accept, it is re-reached by bias continuation at the physical Gamma:
+#march from the last converged point to the failed bias in adaptive sub-steps (halve on a failed
+#sub-solve, double on success), refining only where the branch is hard. Every sub-solve is a real
+#physical solution, so successes chain (no failed-point cascade). The smallest sub-step is
+#dVgrid / 2^vramp_maxdepth; below it a fold is presumed and the point is left as a failure record.
+vramp_maxdepth = 6;
 
 #Current-row equilibration (phisolve scale_current). Row-scale the current-nulling equations
 #and their Jacobian rows by RN so all equations are O(Delta). Does NOT move the root; changes
@@ -83,15 +83,15 @@ if signed_evar
 
     # Negative branch: phisolve sweeps last->first, so pass it reversed to start
     # at the most-negative (largest |V|), then undo the reverse.
-    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, max_scansteps = max_scansteps, scale_current = scale_current);
+    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, vramp_maxdepth = vramp_maxdepth, scale_current = scale_current);
     Ivn = reverse(Ivn); Vipn = reverse(Vipn, dims=1); resn = reverse(resn);
 
     # Positive branch: identical to the unsigned run.
-    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, max_scansteps = max_scansteps, scale_current = scale_current);
+    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, vramp_maxdepth = vramp_maxdepth, scale_current = scale_current);
 
     Iv = [Ivn; Ivp]; Vipsol = [Vipn; Vipp]; residualarr = [resn; resp];
 else
-    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, max_scansteps = max_scansteps, scale_current = scale_current)
+    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, vramp_maxdepth = vramp_maxdepth, scale_current = scale_current)
 end
 
 dIdv = zeros(Float64, Nev);
@@ -160,12 +160,13 @@ ylabel!(L"\phi/(2\pi)")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
 savefig(plot!(p0, dpi=450), "Vt_Ibias_" * str2 * ".png")
 
-p2 = plot(evar/delta, Iv .* RN, lc=:blue, lw=1.5, framestyle=:box)
-vline!([2/1],linestyle=:dash,lc=:gray, label="")
-vline!([2/2],linestyle=:dash,lc=:gray, label="")
-vline!([2/3],linestyle=:dash,lc=:gray, label="")
-vline!([2/4],linestyle=:dash,lc=:gray, label="")
-vline!([2/5],linestyle=:dash,lc=:gray, label="")
+# For the signed sweep there is no data in (-min|V|, +min|V|); insert a NaN at the V=0 branch
+# boundary so the IV / dIdV / residual lines are not drawn across that gap.
+gapi = signed_evar ? count(<(0), evar) : 0
+gapv(v) = gapi == 0 ? v : vcat(v[1:gapi], NaN, v[gapi+1:end])
+xV = gapv(evar ./ delta)
+
+p2 = plot(xV, gapv(Iv .* RN), lc=:blue, lw=1.5, framestyle=:box)
 xlabel!(L"eV/\Delta"); ylabel!(L"IeR_N/\Delta")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
 let xlo = minimum(evar/delta), xhi = maximum(evar/delta), ylo = minimum(Iv .* RN), yhi = maximum(Iv .* RN)
@@ -176,18 +177,13 @@ if plotresidual
     # Solver residual per bias point on a second (right) y-axis, log-scaled so the
     # converged (~1e-12) points and the stalled (~1e-3) ones are both visible.
     axr = twinx(p2);
-    plot!(axr, evar/delta, max.(residualarr, 1e-16), lc=:red, lw=1.2, yscale=:log10,
+    plot!(axr, xV, gapv(max.(residualarr, 1e-16)), lc=:red, lw=1.2, yscale=:log10,
           ylabel=L"\mathrm{residual}\ ||F||", legend=:none, tickfontsize=17, guidefontsize=17,
           y_foreground_color_axis=:red, y_foreground_color_text=:red, y_foreground_color_border=:red, yguidefontcolor=:red);
 end
 savefig(plot!(p2, dpi=450), "IV_Ibias_" * str2 * ".png")
 
-p2v = plot(evar/delta, dIdv .* RN, lc=:blue, lw=1.5, framestyle=:box, legend=:topleft)
-vline!([2/1],linestyle=:dash,lc=:red, label="")
-vline!([2/2],linestyle=:dash,lc=:red, label="")
-vline!([2/3],linestyle=:dash,lc=:red, label="")
-vline!([2/4],linestyle=:dash,lc=:red, label="")
-vline!([2/5],linestyle=:dash,lc=:red, label="")
+p2v = plot(xV, gapv(dIdv .* RN), lc=:blue, lw=1.5, framestyle=:box, legend=:topleft)
 xlabel!(L"eV/\Delta"); ylabel!(L"(dI/dV)eR_N/\Delta")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
 let xlo = minimum(evar/delta), xhi = maximum(evar/delta), ylo = minimum(dIdv .* RN), yhi = maximum(dIdv .* RN)
