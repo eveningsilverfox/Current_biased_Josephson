@@ -2381,6 +2381,48 @@ function edgepeak(x, Nf)
 end
 
 """
+    lm_solve(F, J, x0; ftol=1e-12, maxit=80, lam0=1e-4, up=4.0, down=3.0, lammax=1e12) -> (x, resid)
+
+Self-contained Levenberg-Marquardt solver for the square system `F(x)=0`, used as a fallback when the
+`:trust_region` solve stalls at a residual plateau (a near-singular Jacobian on which the dogleg step
+makes no progress -- seen at low +V near a YSR resonance). Minimises `||F||^2` via the damped normal
+equations
+
+    (JᵀJ + λ·diag(JᵀJ)) δ = -Jᵀ F ,
+
+taking the step only when `||F||` decreases (then `λ /= down`) and otherwise increasing the damping
+(`λ *= up`, up to `lammax`) and retrying. The `λ·diag(JᵀJ)` term shifts the singular values of `J`
+strictly positive, so the step stays well-defined and downhill even where `J` is near-singular. It
+does NOT move the root: the regularisation only affects the step direction, not the fixed point of
+`F=0`. Uses only LinearAlgebra. Starting from a good warm start `x0` (e.g. the stalled trust-region
+iterate); returns the best iterate found and its residual norm. `stepped=false` (no `||F||`-reducing
+step even at maximal damping) signals a genuine local minimum of `||F||^2` and stops early.
+"""
+function lm_solve(F, J, x0; ftol = 1e-12, maxit = 80, lam0 = 1e-4, up = 4.0, down = 3.0, lammax = 1e12)
+    x = copy(x0); fx = F(x); nf = norm(fx); lam = lam0;
+    for it in 1:maxit
+        if nf < ftol 
+            break
+        end
+        Jx = J(x); A = Jx' * Jx; g = Jx' * fx; D = Diagonal(diag(A) .+ 1e-30);
+        stepped = false
+        for _ in 1:20
+            δ = -(A + lam*D) \ g
+            xn = x .+ δ; fn = F(xn); nfn = norm(fn)
+            if nfn < nf
+                x = xn; fx = fn; nf = nfn; lam = max(lam/down, 1e-14)
+                stepped = true
+                break
+            else
+                lam = min(lam*up, lammax)
+            end
+        end
+        stepped || break     # no ||F||-reducing step even at maximal damping -> genuine local minimum
+    end
+    return x, nf
+end
+
+"""
     phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma,
              JL, KL, JR, KR) -> (Iv, Vipsol, residualarr)
 
@@ -2415,9 +2457,11 @@ harmonics needed grows toward low bias. Each point begins at the PREVIOUS conver
 (non-decreasing down the sweep, starting from `Nf_start`) and `Nf` is increased in steps of 2 --
 re-seeding by zero-padding the previous solution ([`embed_seed`](@ref)) -- whenever the solve misses
 `tol_accept` OR the converged spectrum still carries weight at the cutoff ([`edgepeak`](@ref) >
-`edge_tol`, i.e. the window is too narrow), up to the ceiling `Nf`. At the ceiling a residual-converged
-but under-resolved point is kept (with a warning); a point that still misses `tol_accept` is left as a
-failure record (`Iv` stays 0). Solutions are returned zero-padded to the ceiling width.
+`edge_tol`, i.e. the window is too narrow), up to the ceiling `Nf`. At the ceiling, if the solve is
+still short of `tol_accept`, a Levenberg-Marquardt fallback ([`lm_solve`](@ref)) is run from the stalled
+iterate to try to clear a trust-region stall (near-singular Jacobian). A residual-converged but
+under-resolved point is then kept; a point that still misses `tol_accept` is left as a failure record
+(`Iv = NaN`, so the IV/dIdV curves break at a gap). Solutions are returned zero-padded to the ceiling width.
 
 # Returns
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
@@ -2492,7 +2536,20 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
             elseif Nf_try + 2 <= Nfmax
                 Nf_try += 2     # widen the Floquet window and retry
             else
-                accepted = resid < tol_accept  # residual small, but spectrum still broad and not decaying fast enough
+                # Ceiling reached and still short of tol_accept: the trust-region solve has stalled on a
+                # residual plateau (near-singular Jacobian, typically low +V near a YSR resonance). Fall
+                # back to Levenberg-Marquardt from the stalled iterate -- it regularises J'J and can make
+                # progress where the dogleg step is rejected. Keep whichever iterate has the smaller residual.
+                if resid >= tol_accept
+                    t1 = time();
+                    xlm, rlm = Keldyshsetup_Floquetn_ext.lm_solve(Fs, Js, res.zero; ftol = tol_accept);
+                    if rlm < racc
+                        xacc = xlm; racc = rlm;
+                    end
+                    println("   Nf = $Nf_try : LM fallback residual = $racc, edge/peak = $(round(Keldyshsetup_Floquetn_ext.edgepeak(xacc, Nf_try), sigdigits=3)), time = $(round(time()-t1, digits=2))");
+                end
+                accepted = racc < tol_accept
+                resolved = accepted && Keldyshsetup_Floquetn_ext.edgepeak(xacc, Nf_acc) < edge_tol
                 break
             end
         end

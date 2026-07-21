@@ -18,7 +18,7 @@ using JLD
 
 #size (Nf is the MAXIMUM Floquet support; phisolve starts at Nf_start and grows toward Nf as the
 #      phase spectrum widens at low |V|. Raise Nf for deeper low-|V| resolution, at rising cost.)
-Nf = 64;
+Nf = 48;
 
 #energies
 mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 5e-2;
@@ -81,13 +81,14 @@ if signed_evar
     Nneg = count(<(0), evar);                          # = Nev1
     evarneg = evar[1:Nneg]; evarpos = evar[Nneg+1:end];
 
+    # Positive branch first: it carries the hard low-+V stalls, so solving it up front surfaces the
+    # diagnosis quickly (identical to the unsigned run).
+    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current);
+
     # Negative branch: phisolve sweeps last->first, so pass it reversed to start
     # at the most-negative (largest |V|), then undo the reverse.
     Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current);
     Ivn = reverse(Ivn); Vipn = reverse(Vipn, dims=1); resn = reverse(resn);
-
-    # Positive branch: identical to the unsigned run.
-    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current);
 
     Iv = [Ivn; Ivp]; Vipsol = [Vipn; Vipp]; residualarr = [resn; resp];
 else
