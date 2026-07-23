@@ -26,7 +26,7 @@ using JLD
 # V-sweep	0.240	0.10	48	1.15
 # V-sweep	0.333	0.10	34	1.13
 # V-sweep	0.519	0.10	24	1.25
-Nf = 48;
+Nf = 40;
 
 #energies
 mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 5e-2;
