@@ -78,7 +78,7 @@ function impurity4(J, K)
 end
 
 """
-    gsurf4(z, zeta, delta, Vimp) -> Matrix{ComplexF64}
+    gsurf4wb(z, zeta, delta, Vimp) -> Matrix{ComplexF64}
 
 Impurity-dressed lead surface Green's function (4x4) at complex energy `z` (= w+iGamma
 for retarded, w-iGamma for advanced). Builds the clean BCS surface GF `g0` in the
@@ -87,9 +87,31 @@ for retarded, w-iGamma for advanced). Builds the clean BCS surface GF `g0` in th
 contact site:  g = (1 - g0*Vimp)^{-1} g0.  `Vimp = 0` returns the clean `g0` and
 reproduces the original 2x2 result in each block. Subgap poles of `g` are YSR states.
 """
-function gsurf4(z, zeta, delta, Vimp)
+function gsurf4wb(z, zeta, delta, Vimp)
     D = zeta * sqrt(delta^2 - z^2);
     g0 = (1/D) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+    return (I(4) - g0*Vimp) \ g0;
+end
+
+"""
+    gsurf4(zeta, delta, Gamma, ww, Vimp) -> Matrix{ComplexF64}
+
+Finite-band counterpart of [`gsurf4`](@ref): impurity-dressed 4x4 RETARDED surface GF
+built from the transfer-matrix surface GF [`surfacegr`](@ref) (correct finite-band lead)
+instead of the wide-band closed form. The clean 4x4 reservoir GF is block-diagonal in
+{cup,cdn'}(+){cdn,cup'} (assembled from the 2x2 `surfacegr`, anomalous sign flipped in the
+second block); the impurity dresses the contact site via g = (I - g0 Vimp)^{-1} g0.
+Evaluated at z = ww + i*Gamma. Unlike `gsurf4`, `surfacegr` already carries a local iGamma
+on every site (incl. the surface), so NO explicit +iGamma is needed downstream, and the
+2iGamma bath term in the lesser self-energy [`Siglf`](@ref) is its consistent FDT partner.
+"""
+function gsurf4(zeta, delta, Gamma, ww, Vimp)
+    # return gsurf4wb(ww + im*Gamma, zeta, delta, Vimp)      # wide-band closed-form approximation
+    sg = surfacegr(zeta, delta, Gamma, ww, 1);             # correct finite-band 2x2 surface GF
+    sz = ComplexF64[1 0; 0 -1];
+    g0 = zeros(ComplexF64, 4, 4);                          # 4x4 reservoir is block-diagonal in {cup,cdn'}(+){cdn,cup'}
+    g0[[2,3],[2,3]] = sg;                                  # {cdn, cup'} block
+    g0[[1,4],[1,4]] = sz*sg*sz;                            # {cup, cdn'} block (anomalous sign flipped)
     return (I(4) - g0*Vimp) \ g0;
 end
 
@@ -289,12 +311,26 @@ function currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
 
     Idcw = zeros(Float64,Nw1);
     Threads.@threads for hi = 1:Nw1
-        wwab = war1[hi]; z = wwab + im*Gamma; ff = (wwab < 0);
-        g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
-        grL = (I(4) - g0*VimpL) \ g0; gaL = grL'; gl0L = -(grL - gaL);
-        grR = (I(4) - g0*VimpR) \ g0; gaR = grR'; gl0R = -(grR - gaR);
+        wwab = war1[hi];
+        
+        z = wwab + im*Gamma; 
+        # g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];  # wide-band closed form (analytical approximation; surfacegr below is the correct finite-band GF)
+        sg = surfacegr(zeta, delta, Gamma, wwab, 1);   # finite-band 2x2 surface GF (bare reservoir); Gamma folded in (see line ~990)
+        sz = ComplexF64[1 0; 0 -1];
+        g0 = zeros(ComplexF64, 4, 4);                  # 4x4 reservoir GF is block-diagonal in {cup,cdn'}(+){cdn,cup'}
+        g0[[2,3],[2,3]] = sg;                          # {cdn, cup'} block
+        g0[[1,4],[1,4]] = sz*sg*sz;                    # {cup, cdn'} block (anomalous sign flipped)
+        gl0 = -(g0 - g0');
+        
+        zGam0 = wwab + im*Gamma*1e-6; # clean reservoir surface (i0+)
+        g0Gam0 = (1/(zeta*sqrt(delta^2-zGam0^2))) .* ComplexF64[-zGam0 0 0 delta; 0 -zGam0 -delta 0; 0 -delta -zGam0 0; delta 0 0 -zGam0];
+        gl0Gam0 = -(g0Gam0 - g0Gam0');  # clean reservoir spectral (lead-independent)
+        
+        grL = ( I(4) - g0*VimpL ) \ g0;   # grL^-1 = g0^-1 - VimpL ; surfacegr already carries a local iGamma on every site => NO explicit +iGamma
+        grR = ( I(4) - g0*VimpR ) \ g0;
 
-        Siglj = ff .* ( im*2*Gamma*I(8) + [ zeta^2 .* (tz*gl0L*tz) zeros(ComplexF64,4,4); zeros(ComplexF64,4,4) zeta^2 .* (tz*gl0R*tz) ] );
+        ff = (wwab < 0);
+        Siglj = ff .* ( im*2*Gamma*I(8) + [ zeta^2 .* (tz*gl0*tz) zeros(ComplexF64,4,4); zeros(ComplexF64,4,4) zeta^2 .* (tz*gl0*tz) ] );
         grjwar = [grL zeros(ComplexF64,4,4); zeros(ComplexF64,4,4) grR];
         Grjwar = (I(8) - grjwar*Sigrj) \ grjwar;
         Gljwar = Grjwar * Siglj * Grjwar';
@@ -1133,8 +1169,7 @@ end
 
 Lesser self-energy Sig< in the 4x4 Nambu(x)spin Floquet-lead basis: semi-infinite-lead
 embedding via the surface term `zeta^2 (tauz(x)sig0) g< (tauz(x)sig0)` (method 1), with
-the impurity-dressed `g<` from [`glwmnf`](@ref) so the lead+impurity is treated as one
-equilibrium reservoir. The internal flag `Sigl_s` selecting the embedding scheme is
+the bare reservoir `g<` (J=K=0) from [`glwmnf`](@ref). The internal flag `Sigl_s` selecting the embedding scheme is
 hardcoded to `1` (formerly a function argument); `Sigl_s == 2` (alternative embedding)
 is not ported to the 4x4 basis.
 """
@@ -1154,7 +1189,10 @@ function Siglf(ww, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR)
                 zeros(size(Siglbath_d)) Siglbath_d];
 
     ## Sig< from embedding the semi-infinite leads into the surface site (method 1)
-    glwmn = Keldyshsetup_Floquetn_ext.glwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
+    # bare reservoir g<: the impurity sits on the contact site (it dresses gr via grwmnf), NOT in
+    # the semi-infinite reservoir embedded here.
+    J0 = [0.0, 0.0, 0.0];
+    glwmn = Keldyshsetup_Floquetn_ext.glwmnf(ww, Omega, Nf, zeta, delta, Gamma, J0, 0.0, J0, 0.0);
 
     tauzs = kron([1 0; 0 -1], [1 0; 0 1]);   # tau_z (x) sigma_0 = diag(1, 1, -1, -1)
     for ij = -Nf:Nf
