@@ -175,60 +175,57 @@ end
 
 ## ----------Plots----------
 evct = 7;
-p0 = plot(tar0/(2*pi/(2*evar[evct])), Vt[evct,:]/(2*pi), framestyle = :box)
-xlims!(0,1)
-ylims!(0,1+0.2)
+p0 = plot(tar0/(2*pi/(2*evar[evct])), Vt[evct,:]/(2*pi), lc=:blue, lw=1.5, framestyle = :box)
+if evar[evct] < 0
+    xlims!(-1, 0); ylims!(-(1+0.2), 0)
+else
+    xlims!(0, 1); ylims!(0, 1+0.2)
+end
 xlabel!(L"t/(2\pi/\omega_J)")
 ylabel!(L"\phi/(2\pi)")
-plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400),
+      right_margin=3Plots.mm, bottom_margin=3Plots.mm)
 savefig(plot!(p0, dpi=450), "Vt_Ibias_" * str2 * ".png")
 
-evmin = 1; evmax = 26;
-p2 = plot(evar[evmin:Nev]/delta, Iv[evmin:Nev] .* RN, lc=:blue, lw=1.5, framestyle = :box,titlefontsize=20)
-# p2 = plot(evarf/delta, Ivf, lc=:blue, label=L"I", lw=1.5, framestyle = :box,titlefontsize=20)
-vline!([2/1],linestyle=:dash,lc=:gray, label="")
-vline!([2/2],linestyle=:dash,lc=:gray, label="")
-vline!([2/3],linestyle=:dash,lc=:gray, label="")
-vline!([2/4],linestyle=:dash,lc=:gray, label="")
-vline!([2/5],linestyle=:dash,lc=:gray, label="")
+if signed_evar
+    p2 = plot(evar[1:Nev1]./delta,  (Iv.*RN)[1:Nev1],  lc=:blue, lw=1.5, framestyle=:box)
+    plot!(p2, evar[Nev1+1:Nev]./delta, (Iv.*RN)[Nev1+1:Nev], lc=:blue, lw=1.5)
+else
+    p2 = plot(evar./delta,  (Iv.*RN),  lc=:blue, lw=1.5, framestyle=:box)
+end
 xlabel!(L"eV/\Delta")
 ylabel!(L"IeR_N/\Delta")
-plot!(titlefontsize=20)
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
 savefig(plot!(p2, dpi=450), "IV_Ibias_" * str2 * ".png")
 
-evmin = 1;
-# evmax = trunc(Int, 0.75*Nev);
-evmax = Nev;
-p2v = plot(evar[evmin:evmax]/delta, dIdv[evmin:evmax] .* RN, lc=:blue, lw=1.5, framestyle = :box,titlefontsize=20, legend=:topleft)
-vline!([2/1],linestyle=:dash,lc=:red, label="")
-vline!([2/2],linestyle=:dash,lc=:red, label="")
-vline!([2/3],linestyle=:dash,lc=:red, label="")
-vline!([2/4],linestyle=:dash,lc=:red, label="")
-vline!([2/5],linestyle=:dash,lc=:red, label="")
+if signed_evar
+    p2v = plot(evar[1:Nev1]./delta,  (dIdv.*RN)[1:Nev1],  lc=:blue, lw=1.5, framestyle=:box)
+    plot!(p2v, evar[Nev1+1:Nev]./delta, (dIdv.*RN)[Nev1+1:Nev], lc=:blue, lw=1.5)
+else
+    p2v = plot(evar./delta,  (dIdv.*RN),  lc=:blue, lw=1.5, framestyle=:box)
+end
 vline!([2/6],linestyle=:dash,lc=:red)
 xlabel!(L"eV/\Delta")
 ylabel!(L"(dI/dV)eR_N/\Delta")
-plot!(titlefontsize=20)
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
 savefig(plot!(p2v, dpi=450), "dIdV_Ibias_" * str2 * ".png")
 
 if ws == 2
-    pm2 = plot(evar/delta, Iv2_2, label=L"I^{(4)}(\phi_2)", lc=:blue, lw=1.5, framestyle = :box,titlefontsize=20)
-    vline!([2/1],linestyle=:dash,lc=:gray, label="")
-    vline!([2/2],linestyle=:dash,lc=:gray, label="")
-    vline!([2/3],linestyle=:dash,lc=:gray, label="")
-    vline!([2/4],linestyle=:dash,lc=:gray, label="")
-    vline!([2/5],linestyle=:dash,lc=:gray, label="")
+    if signed_evar
+        pm2 = plot(evar[1:Nev1]/delta, Iv2_2[1:Nev1], label=L"I^{(4)}(\phi_2)", lc=:blue, lw=1.5, framestyle = :box)
+        plot!(pm2, evar[Nev1+1:Nev]/delta, Iv2_2[Nev1+1:Nev], label="", lc=:blue, lw=1.5)
+    else
+        pm2 = plot(evar/delta, Iv2_2, label=L"I^{(4)}(\phi_2)", lc=:blue, lw=1.5, framestyle = :box)
+    end
     xlabel!(L"eV/\Delta")
     ylabel!(L"I/(e\mathcal{T}^2/\hbar)")
     plot!(titlefontsize=20, tickfontsize=17, guidefontsize = 17, legendfontsize = 17, legendtitlefontsize = 17, legend=:topleft)
-    pm2p = plot(evar/delta, Iv4_2, label=L"I^{(4)}(\phi_2)", lc=:blue, lw=1.5, framestyle = :box,titlefontsize=20)
-    vline!([2/1],linestyle=:dash,lc=:gray, label="")
-    vline!([2/2],linestyle=:dash,lc=:gray, label="")
-    vline!([2/3],linestyle=:dash,lc=:gray, label="")
-    vline!([2/4],linestyle=:dash,lc=:gray, label="")
-    vline!([2/5],linestyle=:dash,lc=:gray, label="")
+    if signed_evar
+        pm2p = plot(evar[1:Nev1]/delta, Iv4_2[1:Nev1], label=L"I^{(4)}(\phi_2)", lc=:blue, lw=1.5, framestyle = :box)
+        plot!(pm2p, evar[Nev1+1:Nev]/delta, Iv4_2[Nev1+1:Nev], label="", lc=:blue, lw=1.5)
+    else
+        pm2p = plot(evar/delta, Iv4_2, label=L"I^{(4)}(\phi_2)", lc=:blue, lw=1.5, framestyle = :box)
+    end
     xlabel!(L"eV/\Delta")
     plot!(titlefontsize=20, tickfontsize=17, guidefontsize = 17, legendfontsize = 17, legendtitlefontsize = 17, legend=:left)
     p_final2 = plot(pm2, pm2p, layout=(1,2), size=(1050,440), right_margin=4Plots.mm)

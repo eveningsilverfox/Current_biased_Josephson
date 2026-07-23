@@ -13,10 +13,10 @@ using JLD
 # DC current-biased single-channel Josephson junction with classical-spin (YSR)
 # impurities -- 4x4 Nambu(x)spin extension of Josephson_Ibias_Floquetn.jl.
 # The AC voltage V(t) (phase harmonics W_m) is solved SELF-CONSISTENTLY by
-# demanding that only DC current flows (I_{2h}=0). Exact-Dyson scheme (ws=0) only.
+# demanding that only DC current flows (I_{2h}=0).
 # ---------------------------------------------------------------------------
 
-#size (Nf is the MAXIMUM Floquet support; phisolve starts at Nf_start and grows toward Nf as the
+#size (Nf is the max Floquet support. phisolve starts at Nf_start and grows toward Nf as the
 #      phase spectrum widens at low |V|. Raise Nf for deeper low-|V| resolution, at rising cost.)
 # Nf_req ≈ 1.2/(V·Γ) # Empirically found
 # source	V	Γ	Nf	Nf·V·Γ
@@ -26,7 +26,7 @@ using JLD
 # V-sweep	0.240	0.10	48	1.15
 # V-sweep	0.333	0.10	34	1.13
 # V-sweep	0.519	0.10	24	1.25
-Nf = 40;
+Nf = 32;
 
 #energies
 mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 5e-2;
@@ -36,7 +36,7 @@ dw0 = minimum([0.015, Gamma/2.0]);
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 self-consistent I-V)
 #  collinear YSR:        JL=JR=[0,0,Jz]
 #  non-collinear/diode:  rotate JR vs JL, e.g. JR=Jz*[sin(th),0,cos(th)]
-JL = [0.0, 0.0, 5.0]; KL = 1.0;
+JL = [0.0, 0.0, 3.0]; KL = 1.0;
 JR = [0.0, 0.0, 0.0]; KR = 0.0;
 
 #YSR bound-state energies (in-gap poles of each lead's impurity-dressed surface GF)
@@ -67,7 +67,7 @@ ws = 0;
 #Nf_start at the largest |V| and, sweeping down, begins each point at the previous converged support
 #(non-decreasing) and grows Nf in steps of 2 -- up to the ceiling Nf above -- whenever the solve
 #misses tol_accept OR the converged spectrum still has weight at the cutoff (edge/peak > edge_tol).
-Nf_start = 20;      # Floquet support at the largest |V| (grows toward low |V|)
+Nf_start = 12;      # Floquet support at the largest |V| (grows toward low |V|)
 edge_tol = 1e-3;    # grow Nf until |W| at the cutoff is below this fraction of the peak
 
 #Current-row equilibration (phisolve scale_current). Row-scale the current-nulling equations
@@ -153,46 +153,45 @@ save("Vipsol_" * str2 * ".jld", "Vipsol", Vipsol, "residualarr", residualarr, "I
 # save("IV_Ibias_" * str2 * ".jld", "Iv", Iv);
 
 ## ----------Plots----------
-plotresidual = true;   # if true, overlay the per-bias-point solver residual on the I-V (right y-axis)
 
 # YSR energy annotation (numerical, positive in-gap pole, in units of Δ)
 ysrLval = round(EYSR_Ln[2]/delta, digits=3); ysrRval = round(EYSR_Rn[2]/delta, digits=3);
 ysrann1 = text(latexstring("\\epsilon_{YSR,L}/\\Delta=$(ysrLval)"), 11, :left);
 ysrann2 = text(latexstring("\\epsilon_{YSR,R}/\\Delta=$(ysrRval)"), 11, :left);
 
-evct = 7;
-p0 = plot(tar0/(2*pi/(2*evar[evct])), Vt[evct,:]/(2*pi), framestyle = :box)
-xlims!(0,1)
-ylims!(0,1+0.2)
+evct = 150;
+p0 = plot(tar0/(2*pi/(2*evar[evct])), Vt[evct,:]/(2*pi), lc=:blue, lw=1.5, framestyle = :box)
+if evar[evct] < 0
+    xlims!(-1, 0); ylims!(-(1+0.2), 0)
+else
+    xlims!(0, 1); ylims!(0, 1+0.2)
+end
 xlabel!(L"t/(2\pi/\omega_J)")
 ylabel!(L"\phi/(2\pi)")
-plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
+plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400),
+      right_margin=3Plots.mm, bottom_margin=3Plots.mm)
 savefig(plot!(p0, dpi=450), "Vt_Ibias_" * str2 * ".png")
 
-# For the signed sweep there is no data in (-min|V|, +min|V|); insert a NaN at the V=0 branch
-# boundary so the IV / dIdV / residual lines are not drawn across that gap.
-gapi = signed_evar ? count(<(0), evar) : 0
-gapv(v) = gapi == 0 ? v : vcat(v[1:gapi], NaN, v[gapi+1:end])
-xV = gapv(evar ./ delta)
-
-p2 = plot(xV, gapv(Iv .* RN), lc=:blue, lw=1.5, framestyle=:box)
+if signed_evar
+    p2 = plot(evar[1:Nev1]./delta,  (Iv.*RN)[1:Nev1],  lc=:blue, lw=1.5, framestyle=:box)
+    plot!(p2, evar[Nev1+1:Nev]./delta, (Iv.*RN)[Nev1+1:Nev], lc=:blue, lw=1.5)
+else
+    p2 = plot(evar./delta,  (Iv.*RN),  lc=:blue, lw=1.5, framestyle=:box)
+end
 xlabel!(L"eV/\Delta"); ylabel!(L"IeR_N/\Delta")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
 let xlo = minimum(evar/delta), xhi = maximum(evar/delta), ylo = minimum(Iv .* RN), yhi = maximum(Iv .* RN)
     annotate!(p2, xlo + 0.03*(xhi-xlo), yhi - 0.07*(yhi-ylo), ysrann1)
     annotate!(p2, xlo + 0.03*(xhi-xlo), yhi - 0.16*(yhi-ylo), ysrann2)
 end
-if plotresidual
-    # Solver residual per bias point on a second (right) y-axis, log-scaled so the
-    # converged (~1e-12) points and the stalled (~1e-3) ones are both visible.
-    axr = twinx(p2);
-    plot!(axr, xV, gapv(max.(residualarr, 1e-16)), lc=:red, lw=1.2, yscale=:log10,
-          ylabel=L"\mathrm{residual}\ ||F||", legend=:none, tickfontsize=17, guidefontsize=17,
-          y_foreground_color_axis=:red, y_foreground_color_text=:red, y_foreground_color_border=:red, yguidefontcolor=:red);
-end
 savefig(plot!(p2, dpi=450), "IV_Ibias_" * str2 * ".png")
 
-p2v = plot(xV, gapv(dIdv .* RN), lc=:blue, lw=1.5, framestyle=:box, legend=:topleft)
+if signed_evar
+    p2v = plot(evar[1:Nev1]./delta,  (dIdv.*RN)[1:Nev1],  lc=:blue, lw=1.5, framestyle=:box)
+    plot!(p2v, evar[Nev1+1:Nev]./delta, (dIdv.*RN)[Nev1+1:Nev], lc=:blue, lw=1.5)
+else
+    p2v = plot(evar./delta,  (dIdv.*RN),  lc=:blue, lw=1.5, framestyle=:box)
+end
 xlabel!(L"eV/\Delta"); ylabel!(L"(dI/dV)eR_N/\Delta")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
 let xlo = minimum(evar/delta), xhi = maximum(evar/delta), ylo = minimum(dIdv .* RN), yhi = maximum(dIdv .* RN)
