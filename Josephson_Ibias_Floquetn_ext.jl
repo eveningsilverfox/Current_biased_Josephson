@@ -18,6 +18,14 @@ using JLD
 
 #size (Nf is the MAXIMUM Floquet support; phisolve starts at Nf_start and grows toward Nf as the
 #      phase spectrum widens at low |V|. Raise Nf for deeper low-|V| resolution, at rising cost.)
+# Nf_req ≈ 1.2/(V·Γ) # Empirically found
+# source	V	Γ	Nf	Nf·V·Γ
+# Γ-sweep	0.426	0.10	28	1.19
+# Γ-sweep	0.426	0.09	30	1.15
+# Γ-sweep	0.426	0.08	34	1.16
+# V-sweep	0.240	0.10	48	1.15
+# V-sweep	0.333	0.10	34	1.13
+# V-sweep	0.519	0.10	24	1.25
 Nf = 48;
 
 #energies
