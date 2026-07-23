@@ -94,25 +94,28 @@ function gsurf4wb(z, zeta, delta, Vimp)
 end
 
 """
-    gsurf4(zeta, delta, Gamma, ww, Vimp) -> Matrix{ComplexF64}
+    gsurf4(ww, Gamma, zeta, delta, Vimp) -> Matrix{ComplexF64}
 
-Finite-band counterpart of [`gsurf4`](@ref): impurity-dressed 4x4 RETARDED surface GF
-built from the transfer-matrix surface GF [`surfacegr`](@ref) (correct finite-band lead)
-instead of the wide-band closed form. The clean 4x4 reservoir GF is block-diagonal in
-{cup,cdn'}(+){cdn,cup'} (assembled from the 2x2 `surfacegr`, anomalous sign flipped in the
-second block); the impurity dresses the contact site via g = (I - g0 Vimp)^{-1} g0.
-Evaluated at z = ww + i*Gamma. Unlike `gsurf4`, `surfacegr` already carries a local iGamma
-on every site (incl. the surface), so NO explicit +iGamma is needed downstream, and the
-2iGamma bath term in the lesser self-energy [`Siglf`](@ref) is its consistent FDT partner.
+Impurity-dressed 4x4 lead surface Green's function at real energy `ww` with broadening
+`Gamma` (retarded: Gamma>0 -> z = ww + i*Gamma; advanced: pass Gamma<0). Toggles between
+two lead models (edit the active `return`):
+  * [`gsurf4wb`](@ref): wide-band closed-form BCS surface GF (analytical approximation; ACTIVE);
+  * [`surfacegr`](@ref): finite-band transfer-matrix surface GF (correct; commented out).
+In both, the impurity dresses the contact site via g = (I - g0 Vimp)^{-1} g0. NOTE: the
+`surfacegr` branch already carries a local iGamma on every site (incl. the surface), so the
++iGamma / 2iGamma bookkeeping in the lesser self-energy [`Siglf`](@ref) differs between the
+branches: the 2iGamma bath is `surfacegr`'s consistent FDT partner, but double-counts in the
+wide-band branch (which has no local surface iGamma -- B=0).
 """
-function gsurf4(zeta, delta, Gamma, ww, Vimp)
-    # return gsurf4wb(ww + im*Gamma, zeta, delta, Vimp)      # wide-band closed-form approximation
-    sg = surfacegr(zeta, delta, Gamma, ww, 1);             # correct finite-band 2x2 surface GF
-    sz = ComplexF64[1 0; 0 -1];
-    g0 = zeros(ComplexF64, 4, 4);                          # 4x4 reservoir is block-diagonal in {cup,cdn'}(+){cdn,cup'}
-    g0[[2,3],[2,3]] = sg;                                  # {cdn, cup'} block
-    g0[[1,4],[1,4]] = sz*sg*sz;                            # {cup, cdn'} block (anomalous sign flipped)
-    return (I(4) - g0*Vimp) \ g0;
+function gsurf4(ww, Gamma, zeta, delta, Vimp)
+    return gsurf4wb(ww + im*Gamma, zeta, delta, Vimp)      # wide-band closed-form approximation (ACTIVE)
+    ## --- finite-band surfacegr version (comment the line above, uncomment below): ---
+    # sg = surfacegr(zeta, delta, Gamma, ww, 1);            # correct finite-band 2x2 surface GF
+    # sz = ComplexF64[1 0; 0 -1];
+    # g0 = zeros(ComplexF64, 4, 4);                         # 4x4 reservoir is block-diagonal in {cup,cdn'}(+){cdn,cup'}
+    # g0[[2,3],[2,3]] = sg;                                 # {cdn, cup'} block
+    # g0[[1,4],[1,4]] = sz*sg*sz;                           # {cup, cdn'} block (anomalous sign flipped)
+    # return (I(4) - g0*Vimp) \ g0;
 end
 
 """
@@ -146,7 +149,7 @@ end
 Subgap YSR energies obtained by locating the in-gap poles of the impurity-dressed
 surface GF [`gsurf4`](@ref) NUMERICALLY: `gsurf4 = (I - g0 Vimp)^{-1} g0` diverges
 exactly where `det(I - g0(E) Vimp) = 0`, which is real for real subgap `E`. The
-clean `g0` is taken from `gsurf4(E, zeta, delta, 0)`; the determinant is scanned on
+clean `g0` is taken from `gsurf4wb(E, zeta, delta, 0)`; the determinant is scanned on
 `Ngrid` points across `(-delta, delta)` (kept `edge` away from the gap edges) and
 each sign change is refined by bisection. Returns the outermost root pair
 `(-|E_YSR|, +|E_YSR|)`, or `(-delta, delta)` if no subgap pole exists (no bound
@@ -154,7 +157,7 @@ state). Independent cross-check of [`ysr_energies_analytical`](@ref).
 """
 function ysr_energies_numerical(J, K, zeta, delta; Ngrid = 4001, edge = 1e-4)
     Vimp = impurity4(J, K);
-    g0clean(E) = gsurf4(E + 0im, zeta, delta, zeros(ComplexF64, 4, 4));   # clean surface GF g0
+    g0clean(E) = gsurf4wb(E + 0im, zeta, delta, zeros(ComplexF64, 4, 4));   # clean surface GF g0 (wide-band closed form: the YSR pole finder is analytical and scans real subgap E at Gamma=0, so it calls gsurf4wb directly, independent of the gsurf4 toggle)
     fdet(E) = real(det(I(4) - g0clean(E)*Vimp));    # Gr denominator: vanishes at the YSR poles
     
     Egrid = range(-delta*(1-edge), delta*(1-edge), Ngrid);
@@ -1042,9 +1045,8 @@ function grwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
     grwmn_dR = zeros(ComplexF64, 4*(2*Nf+1), 4*(2*Nf+1));
     for ij = -Nf:Nf
         p = -ij+Nf+1; blk = 4*p-3:4*p;
-        z = ww + ij*Omega + im*Gamma;
-        grwmn_dL[blk, blk] = Keldyshsetup_Floquetn_ext.gsurf4(z, zeta, delta, VL);
-        grwmn_dR[blk, blk] = Keldyshsetup_Floquetn_ext.gsurf4(z, zeta, delta, VR);
+        grwmn_dL[blk, blk] = Keldyshsetup_Floquetn_ext.gsurf4(ww + ij*Omega, Gamma, zeta, delta, VL);
+        grwmn_dR[blk, blk] = Keldyshsetup_Floquetn_ext.gsurf4(ww + ij*Omega, Gamma, zeta, delta, VR);
     end
     grwmn = [grwmn_dL zeros(size(grwmn_dL));
              zeros(size(grwmn_dL)) grwmn_dR];
@@ -1070,8 +1072,8 @@ function grwmnf_sp(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
     # Floquet mode ij sits at block position p = -ij+Nf+1, so p = 1..2Nf+1 <-> ij = Nf..-Nf.
     # Build the L-lead blocks then the R-lead blocks in that (reversed) order and stack them
     # block-diagonally == [grwmn_dL 0; 0 grwmn_dR].
-    blocksL = [sparse(Keldyshsetup_Floquetn_ext.gsurf4(ww + ij*Omega + im*Gamma, zeta, delta, VL)) for ij = Nf:-1:-Nf];
-    blocksR = [sparse(Keldyshsetup_Floquetn_ext.gsurf4(ww + ij*Omega + im*Gamma, zeta, delta, VR)) for ij = Nf:-1:-Nf];
+    blocksL = [sparse(Keldyshsetup_Floquetn_ext.gsurf4(ww + ij*Omega, Gamma, zeta, delta, VL)) for ij = Nf:-1:-Nf];
+    blocksR = [sparse(Keldyshsetup_Floquetn_ext.gsurf4(ww + ij*Omega, Gamma, zeta, delta, VR)) for ij = Nf:-1:-Nf];
     # Without the ..., blockdiag(blocksL) would pass a single argument (the Vector), which blockdiag doesn't accept.
     # blocksL = [A, B, C];  blocksR = [D, E];
     # blockdiag(blocksL..., blocksR...) = blockdiag(A, B, C, D, E)
@@ -1095,9 +1097,8 @@ function gawmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
     gawmn_dR = zeros(ComplexF64, 4*(2*Nf+1), 4*(2*Nf+1));
     for ij = -Nf:Nf
         p = -ij+Nf+1; blk = 4*p-3:4*p;
-        z = ww + ij*Omega - im*Gamma;
-        gawmn_dL[blk, blk] = Keldyshsetup_Floquetn_ext.gsurf4(z, zeta, delta, VL);
-        gawmn_dR[blk, blk] = Keldyshsetup_Floquetn_ext.gsurf4(z, zeta, delta, VR);
+        gawmn_dL[blk, blk] = Keldyshsetup_Floquetn_ext.gsurf4(ww + ij*Omega, -Gamma, zeta, delta, VL);   # advanced: Gamma<0 -> z = ww - i*Gamma
+        gawmn_dR[blk, blk] = Keldyshsetup_Floquetn_ext.gsurf4(ww + ij*Omega, -Gamma, zeta, delta, VR);
     end
     gawmn = [gawmn_dL zeros(size(gawmn_dL));
              zeros(size(gawmn_dL)) gawmn_dR];
