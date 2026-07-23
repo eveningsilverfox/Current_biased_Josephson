@@ -220,13 +220,28 @@ function currentPhi_eq_T2(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
 
     Idcw = zeros(Float64,Nw1);
     Threads.@threads for hi = 1:Nw1
-        wwab = war1[hi]; z = wwab + im*Gamma; ff = (wwab < 0);
-        g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
-        grL = (I(4) - g0*VimpL) \ g0; gaL = grL';
-        grR = (I(4) - g0*VimpR) \ g0; gaR = grR';
-        # embedded (occupied-state) lesser GF, per lead
-        gl0L = ff .* ( -(grL - gaL) ); SiglL = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0L*tz) ); glL = grL*SiglL*gaL;
-        gl0R = ff .* ( -(grR - gaR) ); SiglR = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0R*tz) ); glR = grR*SiglR*gaR;
+        z = wwab + im*Gamma; 
+        g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];  # wide-band closed form (analytical approximation; surfacegr below is the correct finite-band GF)
+        # sg = surfacegr(zeta, delta, Gamma, wwab, 1);   # finite-band 2x2 surface GF (bare reservoir); Gamma folded in (see line ~990)
+        # sz = ComplexF64[1 0; 0 -1];
+        # g0 = zeros(ComplexF64, 4, 4);                  # 4x4 reservoir GF is block-diagonal in {cup,cdn'}(+){cdn,cup'}
+        # g0[[2,3],[2,3]] = sg;                          # {cdn, cup'} block
+        # g0[[1,4],[1,4]] = sz*sg*sz;                    # {cup, cdn'} block (anomalous sign flipped)
+        gl0 = -(g0 - g0');
+        
+        grL = ( I(4) - g0*VimpL ) \ g0;   # grL^-1 = g0^-1 - VimpL ; surfacegr already carries a local iGamma on every site => NO explicit +iGamma
+        grR = ( I(4) - g0*VimpR ) \ g0;
+        
+        ff = (wwab < 0);
+        glL = ff .* ( -(grL - grL') );
+        glR = ff .* ( -(grR - grR') );
+
+        # # embedded (occupied-state) lesser GF, per lead
+        # SiglL = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) );
+        # SiglR = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) ); 
+        # glL = grL*SiglL*gaL;
+        # glR = grR*SiglR*gaR;
+        
         # lead just after Sigma_LR -> R, after Sigma_RL -> L
         Idcwlr = real( tr( tz * ( Siglr * grR * Sigrl * glL ) ) ) +
                  real( tr( tz * ( Siglr * glR * Sigrl * gaL ) ) );
@@ -261,10 +276,27 @@ function currentPhi_eq_T4(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
 
     Idcw = zeros(Float64,Nw1);
     Threads.@threads for hi = 1:Nw1
-        wwab = war1[hi]; z = wwab + im*Gamma; ff = (wwab < 0);
-        g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
-        grL = (I(4) - g0*VimpL) \ g0; gaL = grL'; glL = ff .* ( -(grL - gaL) );
-        grR = (I(4) - g0*VimpR) \ g0; gaR = grR'; glR = ff .* ( -(grR - gaR) );
+        z = wwab + im*Gamma; 
+        g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];  # wide-band closed form (analytical approximation; surfacegr below is the correct finite-band GF)
+        # sg = surfacegr(zeta, delta, Gamma, wwab, 1);   # finite-band 2x2 surface GF (bare reservoir); Gamma folded in (see line ~990)
+        # sz = ComplexF64[1 0; 0 -1];
+        # g0 = zeros(ComplexF64, 4, 4);                  # 4x4 reservoir GF is block-diagonal in {cup,cdn'}(+){cdn,cup'}
+        # g0[[2,3],[2,3]] = sg;                          # {cdn, cup'} block
+        # g0[[1,4],[1,4]] = sz*sg*sz;                    # {cup, cdn'} block (anomalous sign flipped)
+        gl0 = -(g0 - g0');
+        
+        grL = ( I(4) - g0*VimpL ) \ g0;   # grL^-1 = g0^-1 - VimpL ; surfacegr already carries a local iGamma on every site => NO explicit +iGamma
+        grR = ( I(4) - g0*VimpR ) \ g0;
+
+        ff = (wwab < 0);
+        glL = ff .* ( -(grL - grL') );
+        glR = ff .* ( -(grR - grR') );
+
+        # # embedded (occupied-state) lesser GF, per lead
+        # SiglL = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) );
+        # SiglR = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) ); 
+        # glL = grL*SiglL*gaL;
+        # glR = grR*SiglR*gaR;
 
         # O(T^2): propagator just after Sigma_LR -> R, after Sigma_RL -> L
         Idcw2lr = real( tr( tz * ( Siglr * grR * Sigrl * glL ) ) ) +
@@ -317,17 +349,13 @@ function currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
         wwab = war1[hi];
         
         z = wwab + im*Gamma; 
-        # g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];  # wide-band closed form (analytical approximation; surfacegr below is the correct finite-band GF)
-        sg = surfacegr(zeta, delta, Gamma, wwab, 1);   # finite-band 2x2 surface GF (bare reservoir); Gamma folded in (see line ~990)
-        sz = ComplexF64[1 0; 0 -1];
-        g0 = zeros(ComplexF64, 4, 4);                  # 4x4 reservoir GF is block-diagonal in {cup,cdn'}(+){cdn,cup'}
-        g0[[2,3],[2,3]] = sg;                          # {cdn, cup'} block
-        g0[[1,4],[1,4]] = sz*sg*sz;                    # {cup, cdn'} block (anomalous sign flipped)
+        g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];  # wide-band closed form (analytical approximation; surfacegr below is the correct finite-band GF)
+        # sg = surfacegr(zeta, delta, Gamma, wwab, 1);   # finite-band 2x2 surface GF (bare reservoir); Gamma folded in (see line ~990)
+        # sz = ComplexF64[1 0; 0 -1];
+        # g0 = zeros(ComplexF64, 4, 4);                  # 4x4 reservoir GF is block-diagonal in {cup,cdn'}(+){cdn,cup'}
+        # g0[[2,3],[2,3]] = sg;                          # {cdn, cup'} block
+        # g0[[1,4],[1,4]] = sz*sg*sz;                    # {cup, cdn'} block (anomalous sign flipped)
         gl0 = -(g0 - g0');
-        
-        zGam0 = wwab + im*Gamma*1e-6; # clean reservoir surface (i0+)
-        g0Gam0 = (1/(zeta*sqrt(delta^2-zGam0^2))) .* ComplexF64[-zGam0 0 0 delta; 0 -zGam0 -delta 0; 0 -delta -zGam0 0; delta 0 0 -zGam0];
-        gl0Gam0 = -(g0Gam0 - g0Gam0');  # clean reservoir spectral (lead-independent)
         
         grL = ( I(4) - g0*VimpL ) \ g0;   # grL^-1 = g0^-1 - VimpL ; surfacegr already carries a local iGamma on every site => NO explicit +iGamma
         grR = ( I(4) - g0*VimpR ) \ g0;
