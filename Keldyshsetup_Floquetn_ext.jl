@@ -376,6 +376,38 @@ function currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
     return Idc
 end
 
+"""
+    currentPhi_eq_Floquet_Tfull(Omega, Nf, dw, zeta, delta, T, Gamma, phi, JL, KL, JR, KR) -> Float64
+
+Equilibrium current-phase relation I(phi) obtained by repurposing the non-equilibrium
+Floquet current machinery ([`current_Floquet_Tfull`](@ref)) at zero voltage. A static
+phase is a single DC tunnelling harmonic, so set the phase Fourier vector to
+`Vip = e^{-i phi/2} * delta_{m,0}` (only the m=0 slot, index 2Nf+1). Then the hopping
+self-energy [`Vwmnf`](@ref) couples block `(ij,jk)` only for `ij=jk`: the whole
+8(2Nf+1) Floquet-lead problem goes block-diagonal, every Floquet mode decouples, and the
+8x8 (2-lead Nambu(x)spin) block at energy `w+m*Omega` is exactly the static junction of
+[`currentPhi_eq_Tfull`](@ref). The reduced-zone integral over [-Omega/2, Omega/2] summed
+over the 2Nf+1 diagonal current blocks (`sum(diag(Iif))`) re-tiles the full frequency
+axis, so `Omega` (grid spacing) and `Nf` (mode count) are pure DISCRETISATION knobs:
+choose `(Nf+1/2)*Omega >~ zeta` to cover the band and `dw <~ Gamma/5` to resolve the YSR
+peaks. The G< embedding (bath 2iGamma + surface `zeta^2 tau_z g<0 tau_z`, [`Siglf`](@ref))
+is inherited verbatim from the V-bias solver, so this reproduces [`currentPhi_eq_Tfull`](@ref)
+to grid accuracy (same wide-band g0, same embedding, same current). Scan phi and take
+`I_c^+ = max_phi I`, `I_c^- = -min_phi I`.
+"""
+function currentPhi_eq_Floquet_Tfull(Omega, Nf, dw, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
+    Nw0  = 2*ceil(Int, abs(Omega)/(2*dw));                             # even cell count: PH-symmetric midpoint sampling
+    war0 = -0.5*abs(Omega) .+ ((0:Nw0-1) .+ 0.5) .* (abs(Omega)/Nw0);  # reduced Floquet zone [-Omega/2, Omega/2], midpoint rule (no sample on the T=0 step)
+
+    Vip = zeros(ComplexF64, 4*Nf+1);
+    Vip[2*Nf+1] = exp(-im*phi/2);   # static phase: e^{-i phi/2} placed at the m=0 (DC) harmonic -> Vwmnf block-diagonal in Floquet
+
+    Iif = Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, 0);
+    Idc = real(sum(diag(Iif)));   # DC current = sum of diagonal Floquet blocks (re-tiled full-band integral)
+
+    return Idc
+end
+
 
 ## ============ V bias perturbative with explicit energy exchanges (MPT: non-renormalised jumps) ============
 
@@ -1466,75 +1498,6 @@ function current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL,
     return Iif
 end
 
-"""
-    current_Floquet_T6(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint) -> Matrix{ComplexF64}
-
-Floquet-mode-resolved current truncated at O(𝒯⁶) (uses [`Glesser_Floquet_T6`](@ref)).
-"""
-function current_Floquet_T6(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint)
-    Nw0 = length(war0); deltaw0 = abs(war0[2]-war0[1]);
-
-    Vvi = Keldyshsetup_Floquetn_ext.Viwmnf(Vip, Nf, T); #Has extra tau_z Nambu Pauli matrix needed in current calculation
-    
-    Iiwf = zeros(ComplexF64, 2*Nf+1,2*Nf+1,Nw0);
-    Threads.@threads for ij = 1:Nw0
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
-        
-        Glwmn = Keldyshsetup_Floquetn_ext.Glesser_Floquet_T6(war0[ij], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn, conj(transpose(grwmn)), glwmn);
-        Itemp0 = -Vvi*Glwmn; #Has extra tau_z Nambu Pauli matrix needed in current calculation
-        ##--m2--
-        Threads.@threads for jk = 1:2*Nf+1
-            for kl = 1:2*Nf+1          #VLR*G<RL                                               #VRL*G<LR
-                Iiwf[jk,kl,ij] = (Itemp0[4*jk-3,4*kl-3]+Itemp0[4*jk-2,4*kl-2]+Itemp0[4*jk-1,4*kl-1]+Itemp0[4*jk,4*kl]) - (Itemp0[4*(2*Nf+1)+4*jk-3,4*(2*Nf+1)+4*kl-3]+Itemp0[4*(2*Nf+1)+4*jk-2,4*(2*Nf+1)+4*kl-2]+Itemp0[4*(2*Nf+1)+4*jk-1,4*(2*Nf+1)+4*kl-1]+Itemp0[4*(2*Nf+1)+4*jk,4*(2*Nf+1)+4*kl]); #Trace in Nambu space for each Floquet mode (jk)
-            end
-        end
-    end
-
-    Iif = zeros(ComplexF64, 2*Nf+1,2*Nf+1);
-    Threads.@threads for jk = 1:2*Nf+1
-        for kl = 1:2*Nf+1
-            Iif[jk,kl] = (deltaw0 / (2*pi)) * sum(Iiwf[jk,kl,:]);
-        end
-    end
-    
-    return Iif
-end
-
-"""
-    current_Floquet_T8(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint) -> Matrix{ComplexF64}
-
-Floquet-mode-resolved current truncated at O(𝒯⁸) (uses [`Glesser_Floquet_T8`](@ref)).
-"""
-function current_Floquet_T8(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint)
-    Nw0 = length(war0); deltaw0 = abs(war0[2]-war0[1]);
-
-    Vvi = Keldyshsetup_Floquetn_ext.Viwmnf(Vip, Nf, T); #Has extra tau_z Nambu Pauli matrix needed in current calculation
-    
-    Iiwf = zeros(ComplexF64, 2*Nf+1,2*Nf+1,Nw0);
-    Threads.@threads for ij = 1:Nw0
-        grwmn = Keldyshsetup_Floquetn_ext.grwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
-        glwmn = Keldyshsetup_Floquetn_ext.glwmnf(war0[ij], Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
-        
-        Glwmn = Keldyshsetup_Floquetn_ext.Glesser_Floquet_T8(war0[ij], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn, conj(transpose(grwmn)), glwmn);
-        Itemp0 = -Vvi*Glwmn; #Has extra tau_z Nambu Pauli matrix needed in current calculation
-        ##--m2--
-        Threads.@threads for jk = 1:2*Nf+1
-            for kl = 1:2*Nf+1          #VLR*G<RL                                               #VRL*G<LR
-                Iiwf[jk,kl,ij] = (Itemp0[4*jk-3,4*kl-3]+Itemp0[4*jk-2,4*kl-2]+Itemp0[4*jk-1,4*kl-1]+Itemp0[4*jk,4*kl]) - (Itemp0[4*(2*Nf+1)+4*jk-3,4*(2*Nf+1)+4*kl-3]+Itemp0[4*(2*Nf+1)+4*jk-2,4*(2*Nf+1)+4*kl-2]+Itemp0[4*(2*Nf+1)+4*jk-1,4*(2*Nf+1)+4*kl-1]+Itemp0[4*(2*Nf+1)+4*jk,4*(2*Nf+1)+4*kl]); #Trace in Nambu space for each Floquet mode (jk)
-            end
-        end
-    end
-
-    Iif = zeros(ComplexF64, 2*Nf+1,2*Nf+1);
-    Threads.@threads for jk = 1:2*Nf+1
-        for kl = 1:2*Nf+1
-            Iif[jk,kl] = (deltaw0 / (2*pi)) * sum(Iiwf[jk,kl,:]);
-        end
-    end
-    
-    return Iif
-end
 
 """
     Vwmnf(Vip, Nf, T) -> Matrix{ComplexF64}

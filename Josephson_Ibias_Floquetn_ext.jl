@@ -12,7 +12,7 @@ using JLD
 # ---------------------------------------------------------------------------
 # DC current-biased single-channel Josephson junction with classical-spin (YSR)
 # impurities -- 4x4 Nambu(x)spin extension of Josephson_Ibias_Floquetn.jl.
-# The AC voltage V(t) (phase harmonics W_m) is solved SELF-CONSISTENTLY by
+# The AC voltage V(t) (phase harmonics W_m) is solved self-consistently by
 # demanding that only DC current flows (I_{2h}=0).
 # ---------------------------------------------------------------------------
 
@@ -34,9 +34,7 @@ dw0 = minimum([0.015, Gamma/2.0]);
 
 #classical-spin impurities (units of Delta): J=(Jx,Jy,Jz) exchange, K potential
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 self-consistent I-V)
-#  collinear YSR:        JL=JR=[0,0,Jz]
-#  non-collinear/diode:  rotate JR vs JL, e.g. JR=Jz*[sin(th),0,cos(th)]
-JL = [0.0, 0.0, 3.0]; KL = 1.0;
+JL = [0.0, 0.0, 1.0]; KL = 1.0;
 JR = [0.0, 0.0, 0.0]; KR = 0.0;
 
 #YSR bound-state energies (in-gap poles of each lead's impurity-dressed surface GF)
