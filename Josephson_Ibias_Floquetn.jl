@@ -11,18 +11,18 @@ using JLD
 
 
 #size
-Nf = 22; #Vv max freq = 2*Nf * (ev), or Nf * (2ev), but only even multiples of eV used/solved for. 
+Nf = 16; #Vv max freq = 2*Nf * (ev), or Nf * (2ev), but only even multiples of eV used/solved for. 
 
 #energies
-mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 5e-3;
+mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 5e-2;
 dw0 = minimum([0.015, Gamma/2.0]);
 
 #voltage
 signed_evar = false;
 if signed_evar
-    Nev1 = 90; evar1 = delta*range(0.36, 3.0, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+    Nev1 = 90; evar1 = delta*range(0.3, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 else
-    Nev = 90; evar = delta*range(0.36, 3.0, Nev);
+    Nev = 90; evar = delta*range(0.3, 3.2, Nev);
 end
 
 #time
@@ -36,11 +36,7 @@ ws = 0; #0:exact, 2:w2, 4:w4
 #naming
 fnum(x) = x isa Integer ? string(x) : replace(string(round(x, sigdigits=4)), "." => "p");   # numeric value -> filename token ('.' -> 'p')
 str1 = "Nf$(Nf)_delta$(fnum(delta))_zeta$(fnum(zeta))_T$(fnum(T))_Gam$(fnum(Gamma))_V$(fnum(first(evar)))_$(fnum(last(evar)))_$(Nev)";
-if ws == 8
-    str2 = "n_w8_" * str1;
-elseif ws == 6
-    str2 = "n_w6_" * str1;
-elseif ws == 4
+if  ws == 4
     str2 = "n_w4_" * str1;
 elseif ws == 2
     str2 = "n_w2_" * str1;
@@ -126,6 +122,12 @@ end
 ## ------------RN--------------
 RN = Keldyshsetup_Floquetn.RN_full(Nf, dw0, zeta, delta, T, Gamma);
 
+## ------------Ic--------------
+Nphi  = 50
+phiar = 2*pi*range(0.0, 1.0, Nphi)
+cphi = Keldyshsetup_Floquetn.currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, ph);
+Ic = maximum(cphi)
+
 ## ------------Saving----------------
 save("Vipsol_" * str2 * ".jld", "Vipsol", Vipsol);
 save("IV_Ibias_" * str2 * ".jld", "Iv", Iv);
@@ -193,6 +195,7 @@ if signed_evar
 else
     p2 = plot(evar./delta,  (Iv.*RN),  lc=:blue, lw=1.5, framestyle=:box)
 end
+plot!(p2, [0.0, 0.0], [-Ic, Ic] .* RN, lc=colors[m], lw=2.2, marker=:hline, markersize=6, label="")
 xlabel!(L"eV/\Delta")
 ylabel!(L"IeR_N/\Delta")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
