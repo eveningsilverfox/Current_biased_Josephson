@@ -14,20 +14,20 @@ using JLD
 # ---------------------------------------------------------------------------
 
 #energies
-mu = 0; delta = 1; zeta = 5; Gamma = 1e-2;
+mu = 0; delta = 1; zeta = 5; Gamma = 1e-3;
 dw1 = Gamma/5; wmax = 2*zeta; #Converges rapidly as wmax increases over delta.
 Nw1 = 2*ceil(Int, wmax/dw1); war1 = -wmax .+ ((0:Nw1-1) .+ 0.5) .* (2*wmax/Nw1); # even-count midpoint sampling: PH-symmetric, no sample on the T=0 step at w=0
 
 #transparency sweep: NT points, log-spaced from deep in the tunnel limit up to 1.0
 #(log spacing so the small-T tunnel regime is well resolved; for linear use range(Tmin,1.0,NT))
-NT = 2; Tmin = 1e-4; Tmax = 2.5; Tar = 10 .^ range(log10(Tmin), log10(Tmax), NT);
+NT = 8; Tmin = 1e-4; Tmax = 4; Tar = 10 .^ range(log10(Tmin), log10(Tmax), NT);
 
 #classical-spin impurities (units of Delta): J = (Jx,Jy,Jz) exchange, K potential
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 I(phi))
 #  collinear YSR:        JL=JR=[0,0,Jz]
 #  non-collinear/diode:  rotate JR vs JL, e.g. JR=Jz*[sin(th),0,cos(th)]
-JL = [0.0, 0.0, 5.0]; KL = 1.0;
-JR = [0.0, 0.0, 0.0]; KR = 0.0;
+JL = [0.0, 0.0, 5.0]; KL = 3.0;
+JR = [0.0, 0.0, 5.0]; KR = 0.0;
 
 #Phase
 Nphi = 50; phiar = 2*pi*range(0.0, 1.0, Nphi);
@@ -53,6 +53,23 @@ for gh = 1:NT
     etaTar[gh] = (IcpTar[gh] - IcmTar[gh]) / (IcpTar[gh] + IcmTar[gh]);
     RNTar[gh]  = Keldyshsetup_Floquetn_ext.RN_full(22, dw1, zeta, delta, T, Gamma, JL, KL, JR, KR);
     println("T = $(round(T, sigdigits=4)) : Ic+ = $(round(IcpTar[gh], sigdigits=4)), Ic- = $(round(IcmTar[gh], sigdigits=4)), eta = $(round(etaTar[gh], sigdigits=3)), RN = $(round(RNTar[gh], sigdigits=4))");
+end
+
+
+## ----------sin(phi) / cos(phi) components of the CPR----------
+# I(phi) = sum_n [ A_n sin(n phi) + B_n cos(n phi) ]; the n=1 amplitudes are
+#   A_1 = (1/pi) int_0^{2pi} I(phi) sin(phi) dphi,  B_1 = (1/pi) int_0^{2pi} I(phi) cos(phi) dphi.
+# A_1 is the ordinary Josephson (sin) component; B_1 is the anomalous (cos) component, which
+# is nonzero only when time reversal is broken (the YSR impurities) and tilts the CPR into a
+# phi_0 junction. phiar carries both endpoints 0 and 2pi, so the periodic quadrature runs over
+# the first Nphi-1 points (trapezoid = rectangle rule for a periodic integrand).
+dphi = 2*pi/(Nphi-1); pint = 1:Nphi-1;
+A1Tar = zeros(Float64, NT);   # sin(phi) amplitude
+B1Tar = zeros(Float64, NT);   # cos(phi) amplitude
+for gh = 1:NT
+    A1Tar[gh] = (dphi/pi) * sum(cphiTar[gh,pint] .* sin.(phiar[pint]));
+    B1Tar[gh] = (dphi/pi) * sum(cphiTar[gh,pint] .* cos.(phiar[pint]));
+    println("T = $(round(Tar[gh], sigdigits=4)) : A1 = $(round(A1Tar[gh], sigdigits=4)), B1 = $(round(B1Tar[gh], sigdigits=4)), |B1/A1| = $(round(abs(B1Tar[gh]/A1Tar[gh]), sigdigits=3)), phi0 = $(round(atan(B1Tar[gh], A1Tar[gh])/pi, sigdigits=3))pi");
 end
 
 
@@ -104,3 +121,18 @@ plot!(p3, framestyle = :box, size = (680, 480),
 xlabel!(p3, L"\phi/\pi")
 ylabel!(p3, L"I(\phi)\,eR_N/\Delta")
 savefig(plot!(p3, dpi = 450), "cprTar_" * str1 * ".png")
+
+# (4) magnitude of the sin(phi) and cos(phi) CPR components vs transparency
+# (|B_1| stays 0 for a time-reversal-symmetric junction; it grows with the YSR exchange)
+p4 = plot(Tar, abs.(A1Tar) .* (RNTar ./ delta), lc = "#1f5fb4", lw = 2.4, marker = :circle, ms = 4, label = L"|A_1|eR_N/\Delta\ \ (\sin\phi)")
+plot!(p4, Tar, abs.(B1Tar) .* (RNTar ./ delta), lc = :red, lw = 2.4, marker = :diamond, ms = 4, label = L"|B_1|eR_N/\Delta\ \ (\cos\phi)")
+plot!(p4, framestyle = :box, size = (640, 480),
+          legend = :bottomright, legendfontsize = 11,
+          xscale = :log10,
+          left_margin = 5Plots.mm, bottom_margin = 5Plots.mm,
+          right_margin = 4Plots.mm, top_margin = 4Plots.mm,
+          tickfontsize = 14, guidefontsize = 18,
+          grid = true, gridalpha = 0.18, gridstyle = :dot)
+xlabel!(p4, L"T")
+ylabel!(p4, L"|I_1|\,eR_N/\Delta")
+savefig(plot!(p4, dpi = 450), "cprharm_" * str1 * ".png")

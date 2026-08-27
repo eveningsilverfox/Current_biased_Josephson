@@ -94,28 +94,76 @@ function gsurf4wb(z, zeta, delta, Vimp)
 end
 
 """
-    gsurf4(ww, Gamma, zeta, delta, Vimp) -> Matrix{ComplexF64}
+    gsurf4ex(z, zeta, delta, Vimp) -> Matrix{ComplexF64}
 
-Impurity-dressed 4x4 lead surface Green's function at real energy `ww` with broadening
-`Gamma` (retarded: Gamma>0 -> z = ww + i*Gamma; advanced: pass Gamma<0). Toggles between
-two lead models (edit the active `return`):
-  * [`gsurf4wb`](@ref): wide-band closed-form BCS surface GF (analytical approximation; ACTIVE);
-  * [`surfacegr`](@ref): finite-band transfer-matrix surface GF (correct; commented out).
-In both, the impurity dresses the contact site via g = (I - g0 Vimp)^{-1} g0. NOTE: the
-`surfacegr` branch already carries a local iGamma on every site (incl. the surface), so the
-+iGamma / 2iGamma bookkeeping in the lesser self-energy [`Siglf`](@ref) differs between the
-branches: the 2iGamma bath is `surfacegr`'s consistent FDT partner, but double-counts in the
-wide-band branch (which has no local surface iGamma -- B=0).
+Impurity-dressed 4x4 lead surface Green's function at complex energy `z`, from the exact
+closed-form solution of the semi-infinite-chain decimation fixed point
+
+    g_s^-1 = z - H0 - zeta^2 (tau_z (x) sigma_0) g_s (tau_z (x) sigma_0).
+
+Writing the 2x2 Nambu block as `g_s = A + B tau_x` the fixed point gives `A/B = z/delta`
+and a quadratic for `B`, whose decaying root (`g_s -> 0` as `z -> infinity`) is
+
+    g_s(z) = C(z) [z delta; delta z],   C(z) = (1 - sqrt(1 - 4 zeta^2/(z^2 - delta^2)))/(2 zeta^2).
+
+This reproduces [`surfacegr`](@ref) to ~3e-13 while costing one sqrt instead of an
+eigendecomposition per frequency point. Expanding for large bandwidth,
+`C(z) = -1/(zeta sqrt(delta^2-z^2)) + 1/(2 zeta^2) + ...`, recovers [`gsurf4wb`](@ref) as
+the leading term; the `1/(2 zeta^2)` correction is the local `z = w + i*Gamma` piece that
+the wide-band limit drops.
 """
-function gsurf4(ww, Gamma, zeta, delta, Vimp)
-    return gsurf4wb(ww + im*Gamma, zeta, delta, Vimp)      # wide-band closed-form approximation (ACTIVE)
-    ## --- finite-band surfacegr version (comment the line above, uncomment below): ---
-    # sg = surfacegr(zeta, delta, Gamma, ww, 1);            # correct finite-band 2x2 surface GF
+function gsurf4ex(z, zeta, delta, Vimp)
+    g0 = gsurf4ex(z, zeta, delta);
+    return (I(4) - g0*Vimp) \ g0;
+end
+
+"""
+    gsurf4ex(z, zeta, delta) -> Matrix{ComplexF64}
+
+Clean (undressed) exact 4x4 surface Green's function at complex energy `z`.
+"""
+function gsurf4ex(z, zeta, delta)
+    C  = (1 - sqrt(1 - 4*zeta^2/(z^2 - delta^2))) / (2*zeta^2);   # decaying root
+    sg = C .* ComplexF64[z delta; delta z];                        # 2x2 surface GF ({cdn,cup'} convention)
+    sz = ComplexF64[1 0; 0 -1];
+    g0 = zeros(ComplexF64, 4, 4);                                  # block-diagonal in {cup,cdn'}(+){cdn,cup'}
+    g0[[2,3],[2,3]] = sg;                                          # {cdn, cup'} block
+    g0[[1,4],[1,4]] = sz*sg*sz;                                    # {cup, cdn'} block (anomalous sign flipped)
+    return g0;
+end
+
+"""
+    gsurf4(ww, Gamma, zeta, delta, Vimp) -> Matrix{ComplexF64}
+    gsurf4(ww, Gamma, zeta, delta)       -> Matrix{ComplexF64}
+
+4x4 lead surface Green's function at real energy `ww` with broadening `Gamma` (retarded:
+Gamma>0 -> z = ww + i*Gamma; advanced: pass Gamma<0). The 5-argument form dresses the
+contact site with an on-site impurity via g = (I - g0 Vimp)^{-1} g0; the 4-argument form
+returns the clean g0.
+
+This is the single toggle point for the lead model -- every call site in the module goes
+through it, so switching branches here switches them all:
+  * [`gsurf4ex`](@ref): exact closed-form semi-infinite-chain surface GF;
+  * [`surfacegr`](@ref): finite-band transfer-matrix surface GF -- same result as `gsurf4ex`, 
+    but an eigendecomposition per frequency point instead of one sqrt;
+  * [`gsurf4wb`](@ref): wide-band closed-form approximation (leading order in 1/zeta).
+"""
+function gsurf4(ww, Gamma, zeta, delta)
+    return gsurf4ex(ww + im*Gamma, zeta, delta)             # exact closed form
+    ## --- finite-band transfer-matrix version (identical to gsurf4ex, much slower): ---
+    # sg = surfacegr(zeta, delta, Gamma, ww, 1);            # finite-band 2x2 surface GF
     # sz = ComplexF64[1 0; 0 -1];
-    # g0 = zeros(ComplexF64, 4, 4);                         # 4x4 reservoir is block-diagonal in {cup,cdn'}(+){cdn,cup'}
+    # g0 = zeros(ComplexF64, 4, 4);                         # block-diagonal in {cup,cdn'}(+){cdn,cup'}
     # g0[[2,3],[2,3]] = sg;                                 # {cdn, cup'} block
     # g0[[1,4],[1,4]] = sz*sg*sz;                           # {cup, cdn'} block (anomalous sign flipped)
-    # return (I(4) - g0*Vimp) \ g0;
+    # return g0;
+    ## --- wide-band approximation (leading order in 1/zeta): ---
+    # return gsurf4wb(ww + im*Gamma, zeta, delta, zeros(ComplexF64,4,4))
+end
+
+function gsurf4(ww, Gamma, zeta, delta, Vimp)
+    g0 = gsurf4(ww, Gamma, zeta, delta);
+    return (I(4) - g0*Vimp) \ g0;
 end
 
 """
@@ -149,7 +197,7 @@ end
 Subgap YSR energies obtained by locating the in-gap poles of the impurity-dressed
 surface GF [`gsurf4`](@ref) NUMERICALLY: `gsurf4 = (I - g0 Vimp)^{-1} g0` diverges
 exactly where `det(I - g0(E) Vimp) = 0`, which is real for real subgap `E`. The
-clean `g0` is taken from `gsurf4wb(E, zeta, delta, 0)`; the determinant is scanned on
+clean `g0` is taken from the active [`gsurf4`](@ref) branch; the determinant is scanned on
 `Ngrid` points across `(-delta, delta)` (kept `edge` away from the gap edges) and
 each sign change is refined by bisection. Returns the outermost root pair
 `(-|E_YSR|, +|E_YSR|)`, or `(-delta, delta)` if no subgap pole exists (no bound
@@ -157,7 +205,7 @@ state). Independent cross-check of [`ysr_energies_analytical`](@ref).
 """
 function ysr_energies_numerical(J, K, zeta, delta; Ngrid = 4001, edge = 1e-4)
     Vimp = impurity4(J, K);
-    g0clean(E) = gsurf4wb(E + 0im, zeta, delta, zeros(ComplexF64, 4, 4));   # clean surface GF g0 (wide-band closed form: the YSR pole finder is analytical and scans real subgap E at Gamma=0, so it calls gsurf4wb directly, independent of the gsurf4 toggle)
+    g0clean(E) = gsurf4(E, 0.0, zeta, delta);   # clean surface GF g0 from the active gsurf4 branch (Gamma=0: the pole finder scans real subgap E)
     fdet(E) = real(det(I(4) - g0clean(E)*Vimp));    # Gr denominator: vanishes at the YSR poles
     
     Egrid = range(-delta*(1-edge), delta*(1-edge), Ngrid);
@@ -221,12 +269,7 @@ function currentPhi_eq_T2(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
     Idcw = zeros(Float64,Nw1);
     Threads.@threads for hi = 1:Nw1
         z = wwab + im*Gamma; 
-        g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];  # wide-band closed form (analytical approximation; surfacegr below is the correct finite-band GF)
-        # sg = surfacegr(zeta, delta, Gamma, wwab, 1);   # finite-band 2x2 surface GF (bare reservoir); Gamma folded in (see line ~990)
-        # sz = ComplexF64[1 0; 0 -1];
-        # g0 = zeros(ComplexF64, 4, 4);                  # 4x4 reservoir GF is block-diagonal in {cup,cdn'}(+){cdn,cup'}
-        # g0[[2,3],[2,3]] = sg;                          # {cdn, cup'} block
-        # g0[[1,4],[1,4]] = sz*sg*sz;                    # {cup, cdn'} block (anomalous sign flipped)
+        g0 = gsurf4(wwab, Gamma, zeta, delta);
         gl0 = -(g0 - g0');
         
         grL = ( I(4) - g0*VimpL ) \ g0;   # grL^-1 = g0^-1 - VimpL ; surfacegr already carries a local iGamma on every site => NO explicit +iGamma
@@ -277,12 +320,7 @@ function currentPhi_eq_T4(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
     Idcw = zeros(Float64,Nw1);
     Threads.@threads for hi = 1:Nw1
         z = wwab + im*Gamma; 
-        g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];  # wide-band closed form (analytical approximation; surfacegr below is the correct finite-band GF)
-        # sg = surfacegr(zeta, delta, Gamma, wwab, 1);   # finite-band 2x2 surface GF (bare reservoir); Gamma folded in (see line ~990)
-        # sz = ComplexF64[1 0; 0 -1];
-        # g0 = zeros(ComplexF64, 4, 4);                  # 4x4 reservoir GF is block-diagonal in {cup,cdn'}(+){cdn,cup'}
-        # g0[[2,3],[2,3]] = sg;                          # {cdn, cup'} block
-        # g0[[1,4],[1,4]] = sz*sg*sz;                    # {cup, cdn'} block (anomalous sign flipped)
+        g0 = gsurf4(wwab, Gamma, zeta, delta);
         gl0 = -(g0 - g0');
         
         grL = ( I(4) - g0*VimpL ) \ g0;   # grL^-1 = g0^-1 - VimpL ; surfacegr already carries a local iGamma on every site => NO explicit +iGamma
@@ -349,12 +387,7 @@ function currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
         wwab = war1[hi];
         
         z = wwab + im*Gamma; 
-        g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];  # wide-band closed form (analytical approximation; surfacegr below is the correct finite-band GF)
-        # sg = surfacegr(zeta, delta, Gamma, wwab, 1);   # finite-band 2x2 surface GF (bare reservoir); Gamma folded in (see line ~990)
-        # sz = ComplexF64[1 0; 0 -1];
-        # g0 = zeros(ComplexF64, 4, 4);                  # 4x4 reservoir GF is block-diagonal in {cup,cdn'}(+){cdn,cup'}
-        # g0[[2,3],[2,3]] = sg;                          # {cdn, cup'} block
-        # g0[[1,4],[1,4]] = sz*sg*sz;                    # {cup, cdn'} block (anomalous sign flipped)
+        g0 = gsurf4(wwab, Gamma, zeta, delta);
         gl0 = -(g0 - g0');
         
         grL = ( I(4) - g0*VimpL ) \ g0;   # grL^-1 = g0^-1 - VimpL ; surfacegr already carries a local iGamma on every site => NO explicit +iGamma
@@ -468,7 +501,7 @@ function current_Vbias_MPT_T2(war1, Omega, zeta, delta, T, Gamma, War, JL, KL, J
         grR = zeros(ComplexF64, 3,4,4); glR = zeros(ComplexF64, 3,4,4); gaR = zeros(ComplexF64, 3,4,4);
         for ab = -1:1
             wwab = war1[hi] + ab*Omega; z = wwab + im*Gamma; ff = (wwab < 0);
-            g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+            g0 = gsurf4(wwab, Gamma, zeta, delta);
             gr = (I(4) - g0*VimpL) \ g0; ga = gr'; gl0 = ff .* ( -(gr - ga) ); Sigl = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) );
             grL[2-ab,:,:] = gr; gaL[2-ab,:,:] = ga; glL[2-ab,:,:] = gr*Sigl*ga;
             gr = (I(4) - g0*VimpR) \ g0; ga = gr'; gl0 = ff .* ( -(gr - ga) ); Sigl = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) );
@@ -513,7 +546,7 @@ function current_Vbias_MPT_T2_qp(war1, Omega, zeta, delta, T, Gamma, War, JL, KL
         grR = zeros(ComplexF64, 3,4,4); glR = zeros(ComplexF64, 3,4,4); gaR = zeros(ComplexF64, 3,4,4);
         for ab = -1:1
             wwab = war1[hi] + ab*Omega; z = wwab + im*Gamma; ff = (wwab < 0);
-            g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+            g0 = gsurf4(wwab, Gamma, zeta, delta);
             gr = (I(4) - g0*VimpL) \ g0; gr[1:2,3:4] .= 0; gr[3:4,1:2] .= 0; ga = gr'; gl0 = ff .* ( -(gr - ga) ); Sigl = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) );
             grL[2-ab,:,:] = gr; gaL[2-ab,:,:] = ga; glL[2-ab,:,:] = gr*Sigl*ga;
             gr = (I(4) - g0*VimpR) \ g0; gr[1:2,3:4] .= 0; gr[3:4,1:2] .= 0; ga = gr'; gl0 = ff .* ( -(gr - ga) ); Sigl = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) );
@@ -560,7 +593,7 @@ function current_Vbias_MPT_T2_pair(war1, Omega, zeta, delta, T, Gamma, War, JL, 
         grR = zeros(ComplexF64, 3,4,4); glR = zeros(ComplexF64, 3,4,4); gaR = zeros(ComplexF64, 3,4,4);
         for ab = -1:1
             wwab = war1[hi] + ab*Omega; z = wwab + im*Gamma; ff = (wwab < 0);
-            g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+            g0 = gsurf4(wwab, Gamma, zeta, delta);
             gr = (I(4) - g0*VimpL) \ g0; gr[1:2,1:2] .= 0; gr[3:4,3:4] .= 0; ga = gr'; gl0 = ff .* ( -(gr - ga) ); Sigl = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) );
             grL[2-ab,:,:] = gr; gaL[2-ab,:,:] = ga; glL[2-ab,:,:] = gr*Sigl*ga;
             gr = (I(4) - g0*VimpR) \ g0; gr[1:2,1:2] .= 0; gr[3:4,3:4] .= 0; ga = gr'; gl0 = ff .* ( -(gr - ga) ); Sigl = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) );
@@ -611,7 +644,7 @@ function current_Vbias_MPT_T4(war1, Omega, zeta, delta, T, Gamma, War, JL, KL, J
         grR = zeros(ComplexF64,5,4,4); glR = zeros(ComplexF64,5,4,4); gaR = zeros(ComplexF64,5,4,4);
         for ab = -2:2
             wwab = war1[hi] + ab*Omega; z = wwab + im*Gamma; ff = (wwab < 0);
-            g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+            g0 = gsurf4(wwab, Gamma, zeta, delta);
             gr = (I(4) - g0*VimpL) \ g0; ga = gr'; grL[3-ab,:,:] = gr; gaL[3-ab,:,:] = ga; glL[3-ab,:,:] = ff .* ( -(gr-ga) );
             gr = (I(4) - g0*VimpR) \ g0; ga = gr'; grR[3-ab,:,:] = gr; gaR[3-ab,:,:] = ga; glR[3-ab,:,:] = ff .* ( -(gr-ga) );
         end
@@ -662,7 +695,7 @@ function current_Vbias_MPT_T4_qp(war1, Omega, zeta, delta, T, Gamma, War, JL, KL
         grR = zeros(ComplexF64,5,4,4); glR = zeros(ComplexF64,5,4,4); gaR = zeros(ComplexF64,5,4,4);
         for ab = -2:2
             wwab = war1[hi] + ab*Omega; z = wwab + im*Gamma; ff = (wwab < 0);
-            g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+            g0 = gsurf4(wwab, Gamma, zeta, delta);
             gr = (I(4) - g0*VimpL) \ g0; gr[1:2,3:4] .= 0; gr[3:4,1:2] .= 0; ga = gr'; grL[3-ab,:,:] = gr; gaL[3-ab,:,:] = ga; glL[3-ab,:,:] = ff .* ( -(gr-ga) );
             gr = (I(4) - g0*VimpR) \ g0; gr[1:2,3:4] .= 0; gr[3:4,1:2] .= 0; ga = gr'; grR[3-ab,:,:] = gr; gaR[3-ab,:,:] = ga; glR[3-ab,:,:] = ff .* ( -(gr-ga) );
         end
@@ -720,7 +753,7 @@ function current_Vbias_MPT_T4_aobo(war1, Omega, zeta, delta, T, Gamma, ao, bo, W
         grR = zeros(ComplexF64,2*mm+1,4,4); glR = zeros(ComplexF64,2*mm+1,4,4); gaR = zeros(ComplexF64,2*mm+1,4,4);
         for ab = -mm:mm
             wwab = war1[hi] + ab*Omega; z = wwab + im*Gamma; ff = (wwab < 0); k = mm+1-ab;
-            g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+            g0 = gsurf4(wwab, Gamma, zeta, delta);
             gr = (I(4) - g0*VimpL) \ g0;  ga = gr'; grL[k,:,:] = gr; gaL[k,:,:] = ga; glL[k,:,:] = ff .* ( -(gr-ga) );
             gr = (I(4) - g0*VimpR) \ g0;  ga = gr'; grR[k,:,:] = gr; gaR[k,:,:] = ga; glR[k,:,:] = ff .* ( -(gr-ga) );
         end
@@ -778,7 +811,7 @@ function current_Vbias_MPT_T4_qp_aobo(war1, Omega, zeta, delta, T, Gamma, ao, bo
         grR = zeros(ComplexF64,2*mm+1,4,4); glR = zeros(ComplexF64,2*mm+1,4,4); gaR = zeros(ComplexF64,2*mm+1,4,4);
         for ab = -mm:mm
             wwab = war1[hi] + ab*Omega; z = wwab + im*Gamma; ff = (wwab < 0); k = mm+1-ab;
-            g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+            g0 = gsurf4(wwab, Gamma, zeta, delta);
             gr = (I(4) - g0*VimpL) \ g0; gr[1:2,3:4] .= 0; gr[3:4,1:2] .= 0; ga = gr'; grL[k,:,:] = gr; gaL[k,:,:] = ga; glL[k,:,:] = ff .* ( -(gr-ga) );
             gr = (I(4) - g0*VimpR) \ g0; gr[1:2,3:4] .= 0; gr[3:4,1:2] .= 0; ga = gr'; grR[k,:,:] = gr; gaR[k,:,:] = ga; glR[k,:,:] = ff .* ( -(gr-ga) );
         end
@@ -836,7 +869,7 @@ function current_Vbias_MPT_T4_pair_aobo(war1, Omega, zeta, delta, T, Gamma, ao, 
         grR = zeros(ComplexF64,2*mm+1,4,4); glR = zeros(ComplexF64,2*mm+1,4,4); gaR = zeros(ComplexF64,2*mm+1,4,4);
         for ab = -mm:mm
             wwab = war1[hi] + ab*Omega; z = wwab + im*Gamma; ff = (wwab < 0); k = mm+1-ab;
-            g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+            g0 = gsurf4(wwab, Gamma, zeta, delta);
             gr = (I(4) - g0*VimpL) \ g0; gr[1:2,1:2] .= 0; gr[3:4,3:4] .= 0; ga = gr'; grL[k,:,:] = gr; gaL[k,:,:] = ga; glL[k,:,:] = ff .* ( -(gr-ga) );
             gr = (I(4) - g0*VimpR) \ g0; gr[1:2,1:2] .= 0; gr[3:4,3:4] .= 0; ga = gr'; grR[k,:,:] = gr; gaR[k,:,:] = ga; glR[k,:,:] = ff .* ( -(gr-ga) );
         end
@@ -894,7 +927,7 @@ function current_Vbias_MPT_T6(war1, Omega, zeta, delta, T, Gamma, War, JL, KL, J
         grR = zeros(ComplexF64,7,4,4); glR = zeros(ComplexF64,7,4,4); gaR = zeros(ComplexF64,7,4,4);
         for ab = -3:3
             wwab = war1[hi] + ab*Omega; z = wwab + im*Gamma; ff = (wwab < 0);
-            g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+            g0 = gsurf4(wwab, Gamma, zeta, delta);
             gr = (I(4) - g0*VimpL) \ g0;  ga = gr'; grL[4-ab,:,:] = gr; gaL[4-ab,:,:] = ga; glL[4-ab,:,:] = ff .* ( -(gr-ga) );
             gr = (I(4) - g0*VimpR) \ g0;  ga = gr'; grR[4-ab,:,:] = gr; gaR[4-ab,:,:] = ga; glR[4-ab,:,:] = ff .* ( -(gr-ga) );
         end
@@ -952,7 +985,7 @@ function current_Vbias_MPT_T6_pair(war1, Omega, zeta, delta, T, Gamma, War, JL, 
         grR = zeros(ComplexF64,7,4,4); glR = zeros(ComplexF64,7,4,4); gaR = zeros(ComplexF64,7,4,4);
         for ab = -3:3
             wwab = war1[hi] + ab*Omega; z = wwab + im*Gamma; ff = (wwab < 0);
-            g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+            g0 = gsurf4(wwab, Gamma, zeta, delta);
             gr = (I(4) - g0*VimpL) \ g0; gr[1:2,1:2] .= 0; gr[3:4,3:4] .= 0; ga = gr'; grL[4-ab,:,:] = gr; gaL[4-ab,:,:] = ga; glL[4-ab,:,:] = ff .* ( -(gr-ga) );
             gr = (I(4) - g0*VimpR) \ g0; gr[1:2,1:2] .= 0; gr[3:4,3:4] .= 0; ga = gr'; grR[4-ab,:,:] = gr; gaR[4-ab,:,:] = ga; glR[4-ab,:,:] = ff .* ( -(gr-ga) );
         end
@@ -1010,7 +1043,7 @@ function current_Vbias_MPT_T6_qp(war1, Omega, zeta, delta, T, Gamma, War, JL, KL
         grR = zeros(ComplexF64,7,4,4); glR = zeros(ComplexF64,7,4,4); gaR = zeros(ComplexF64,7,4,4);
         for ab = -3:3
             wwab = war1[hi] + ab*Omega; z = wwab + im*Gamma; ff = (wwab < 0);
-            g0 = (1/(zeta*sqrt(delta^2-z^2))) .* ComplexF64[-z 0 0 delta; 0 -z -delta 0; 0 -delta -z 0; delta 0 0 -z];
+            g0 = gsurf4(wwab, Gamma, zeta, delta);
             gr = (I(4) - g0*VimpL) \ g0; gr[1:2,3:4] .= 0; gr[3:4,1:2] .= 0; ga = gr'; grL[4-ab,:,:] = gr; gaL[4-ab,:,:] = ga; glL[4-ab,:,:] = ff .* ( -(gr-ga) );
             gr = (I(4) - g0*VimpR) \ g0; gr[1:2,3:4] .= 0; gr[3:4,1:2] .= 0; ga = gr'; grR[4-ab,:,:] = gr; gaR[4-ab,:,:] = ga; glR[4-ab,:,:] = ff .* ( -(gr-ga) );
         end

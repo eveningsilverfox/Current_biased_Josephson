@@ -23,17 +23,17 @@ using Printf
 # ---------------------------------------------------------------------------
 
 #size
-Nf = 30;
+Nf = 32;
 
 #energies
-mu = 0; delta = 1; zeta = 20; T = 0.1*zeta; Gamma = 0.02;
-dw0 = minimum([Gamma/5, 0.01]);
+mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 0.01;
+dw0 = minimum([0.015, Gamma/2]);
 
 #classical-spin impurities (units of Delta): J = (Jx,Jy,Jz) exchange, K potential
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 result)
 #  collinear YSR:      JL=JR=[0,0,Jz]
 #  non-collinear/diode: rotate JR relative to JL, e.g. JR=Jz*[sin(th),0,cos(th)]
-JL = [0.0, 0.0, 0.0]; KL = 0.0;
+JL = [0.0, 0.0, 3.0]; KL = 0.0;
 JR = [0.0, 0.0, 0.0]; KR = 0.0;
 
 #YSR bound-state energies (in-gap poles of each lead's impurity-dressed surface GF)
@@ -44,9 +44,9 @@ EYSR_Rn = Keldyshsetup_Floquetn_ext.ysr_energies_numerical(JR, KR, zeta, delta);
 println("YSR energies E/Δ  | L lead: analytical=$(round.(EYSR_La./delta, digits=5)) numerical=$(round.(EYSR_Ln./delta, digits=5))")
 println("                  | R lead: analytical=$(round.(EYSR_Ra./delta, digits=5)) numerical=$(round.(EYSR_Rn./delta, digits=5))")
 
-#voltage
-Nev = 30; evar = delta*range(0.05, 3.25, Nev);
-# Nev1 = 30; evar1 = delta*range(0.05, 3.25, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+#voltage (same grid as the current-biased run's positive branch)
+Nev = 200; evar = delta*range(0.24, 2.4, Nev);
+# Nev1 = 160; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 
 #Lesser self energy
 
@@ -56,7 +56,7 @@ ws = 0;
 #naming
 fnum(x) = x isa Integer ? string(x) : replace(string(round(x, sigdigits=4)), "." => "p");   # numeric value -> filename token ('.' -> 'p')
 fvec(v) = join(fnum.(v), "-");                                                               # vector value -> components joined by '-'
-str1 = "Nf$(Nf)_Vbias_ext_delta$(fnum(delta))_zeta$(fnum(zeta))_T$(fnum(T/zeta))zeta_Gam$(fnum(Gamma))_V$(fnum(first(evar)))_$(fnum(last(evar)))_$(Nev)_JL$(fvec(JL))_KL$(fnum(KL))_JR$(fvec(JR))_KR$(fnum(KR))";
+str1 = "Nf$(Nf)_Vbias_ext_delta$(fnum(delta))_zeta$(fnum(zeta))_T$(fnum(T))_Gam$(fnum(Gamma))_V$(fnum(first(evar)))_$(fnum(last(evar)))_$(Nev)_JL$(fvec(JL))_KL$(fnum(KL))_JR$(fvec(JR))_KR$(fnum(KR))";
 str2 = "n_" * str1;
 
 ## ----------Setup----------
@@ -92,45 +92,52 @@ for hi = 1:Nev
     Iv[hi] = real(sum(diag(If[hi,:,:])));
 end
 
+# CENTRED differences (a forward difference biases every peak by dV/2, which is
+# comparable to the current-vs-voltage-bias shifts being compared here)
+dVg = evar[2]-evar[1];
 dIdv = zeros(Float64, Nev);
-for hi = 1:Nev-1
-    dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
+for hi = 2:Nev-1
+    dIdv[hi] = (Iv[hi+1]-Iv[hi-1]) / (2*dVg);
 end
-dIdv[Nev] = dIdv[Nev-1] + (dIdv[Nev-1]-dIdv[Nev-2])
+dIdv[1]   = (-3*Iv[1]   + 4*Iv[2]     - Iv[3])     / (2*dVg);
+dIdv[Nev] = ( 3*Iv[Nev] - 4*Iv[Nev-1] + Iv[Nev-2]) / (2*dVg);
 
 ## ------------RN--------------
 RN = Keldyshsetup_Floquetn_ext.RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR);
 
+## ----------Save----------
+save("IV_Vbias_" * str2 * ".jld", "evar", collect(evar), "Iv", Iv, "dIdv", dIdv, "RN", RN);
+
+## ----------Threshold guides----------
+# Villas et al., PRB 101, 235445 (2020), Fig. 9: with a YSR level at +/-Ey on one
+# electrode the subgap thresholds are
+#   2D/n      standard MARs (continuum -> continuum)
+#   (D+Ey)/n  MARs that start OR end on the YSR level
+#   2Ey/n     MARs between YSR states (forbidden in their spin-polarised model)
+EyL      = abs(EYSR_Ln[2])/delta;
+thr_MAR  = [2/n       for n in 1:6];
+thr_YSR1 = [(1+EyL)/n for n in 1:6];
+thr_YSR2 = [2*EyL/n   for n in 1:6];
+
 ## ----------Plots----------
 # YSR energy annotation (numerical, positive in-gap pole, in units of Δ)
 ysrLval = round(EYSR_Ln[2]/delta, digits=3); ysrRval = round(EYSR_Rn[2]/delta, digits=3);
-ysrann1 = text(latexstring("\\epsilon_{YSR,L}/\\Delta=$(ysrLval)"), 11, :left);
-ysrann2 = text(latexstring("\\epsilon_{YSR,R}/\\Delta=$(ysrRval)"), 11, :left);
+ysrttl = latexstring("\\epsilon_{YSR,L}/\\Delta=$(ysrLval),\\quad \\epsilon_{YSR,R}/\\Delta=$(ysrRval)");
 
 p2 = plot(evar/delta, Iv * RN, lc=:blue, label=L"I", lw=1.5, framestyle=:box)
-vline!([2/1],linestyle=:dash,lc=:red, label="")
-vline!([2/2],linestyle=:dash,lc=:red, label="")
-vline!([2/3],linestyle=:dash,lc=:red, label="")
-vline!([2/4],linestyle=:dash,lc=:red, label="")
-vline!([2/5],linestyle=:dash,lc=:red, label="")
+vline!(p2, thr_MAR,  ls=:dash,    lc=:red,    lw=0.9, label=L"2\Delta/n")
+vline!(p2, thr_YSR1, ls=:dot,     lc=:green,  lw=1.1, label=L"(\Delta+\epsilon_{YSR})/n")
+vline!(p2, thr_YSR2, ls=:dashdot, lc=:purple, lw=0.9, label=L"2\epsilon_{YSR}/n")
 xlabel!(L"eV/\Delta"); ylabel!(L"I(V) R_N")
-plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
-let xlo = minimum(evar/delta), xhi = maximum(evar/delta), ylo = minimum(Iv * RN), yhi = maximum(Iv * RN)
-    annotate!(p2, xlo + 0.03*(xhi-xlo), yhi - 0.07*(yhi-ylo), ysrann1)
-    annotate!(p2, xlo + 0.03*(xhi-xlo), yhi - 0.16*(yhi-ylo), ysrann2)
-end
+plot!(p2, title=ysrttl, titlefontsize=11, legend=:topleft, legendfontsize=9,
+      tickfontsize=17, guidefontsize=17, size=(560,440), top_margin=3Plots.mm)
 savefig(plot!(p2, dpi=450), "IV_Vbias_" * str2 * ".png")
 
 p2v = plot(evar/delta, dIdv * RN, lc=:blue, label="", lw=1.5, framestyle=:box)
-vline!([2/1],linestyle=:dash,lc=:red, label="")
-vline!([2/2],linestyle=:dash,lc=:red, label="")
-vline!([2/3],linestyle=:dash,lc=:red, label="")
-vline!([2/4],linestyle=:dash,lc=:red, label="")
-vline!([2/5],linestyle=:dash,lc=:red, label="")
+vline!(p2v, thr_MAR,  ls=:dash,    lc=:red,    lw=0.9, label=L"2\Delta/n")
+vline!(p2v, thr_YSR1, ls=:dot,     lc=:green,  lw=1.1, label=L"(\Delta+\epsilon_{YSR})/n")
+vline!(p2v, thr_YSR2, ls=:dashdot, lc=:purple, lw=0.9, label=L"2\epsilon_{YSR}/n")
 xlabel!(L"eV/\Delta"); ylabel!(L"(dI/dV) R_N")
-plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
-let xlo = minimum(evar/delta), xhi = maximum(evar/delta), ylo = minimum(dIdv * RN), yhi = maximum(dIdv * RN)
-    annotate!(p2v, xlo + 0.03*(xhi-xlo), yhi - 0.07*(yhi-ylo), ysrann1)
-    annotate!(p2v, xlo + 0.03*(xhi-xlo), yhi - 0.16*(yhi-ylo), ysrann2)
-end
+plot!(p2v, title=ysrttl, titlefontsize=11, legend=:topleft, legendfontsize=9,
+      tickfontsize=17, guidefontsize=17, size=(560,440), top_margin=3Plots.mm)
 savefig(plot!(p2v, dpi=450), "dIdV_Vbias_" * str2 * ".png")
