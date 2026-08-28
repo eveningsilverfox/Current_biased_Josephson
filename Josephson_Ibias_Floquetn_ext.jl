@@ -68,6 +68,9 @@ ws = 0;
 Nf_start = 12;      # Floquet support at the largest |V| (grows toward low |V|)
 edge_tol = 1e-3;    # grow Nf until |W| at the cutoff is below this fraction of the peak
 
+#Fixed Floquet schedule (phisolve Nf_sched). Set to `nothing` to use the adaptive ratchet above.
+Nf_sched = V -> ceil(Int, 21.0 + 3.1/abs(V));
+
 #Current-row equilibration (phisolve scale_current). Row-scale the current-nulling equations
 #and their Jacobian rows by RN so all equations are O(Delta). Does NOT move the root; changes
 #the actual convergence path. 
@@ -89,16 +92,16 @@ if signed_evar
 
     # Positive branch first: it carries the hard low-+V stalls, so solving it up front surfaces the
     # diagnosis quickly (identical to the unsigned run).
-    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current);
+    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current, Nf_sched = Nf_sched);
 
     # Negative branch: phisolve sweeps last->first, so pass it reversed to start
     # at the most-negative (largest |V|), then undo the reverse.
-    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current);
+    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current, Nf_sched = Nf_sched);
     Ivn = reverse(Ivn); Vipn = reverse(Vipn, dims=1); resn = reverse(resn);
 
     Iv = [Ivn; Ivp]; Vipsol = [Vipn; Vipp]; residualarr = [resn; resp];
 else
-    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current)
+    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current, Nf_sched = Nf_sched)
 end
 
 dIdv = zeros(Float64, Nev);

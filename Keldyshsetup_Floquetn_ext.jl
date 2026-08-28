@@ -2444,48 +2444,6 @@ function edgepeak(x, Nf)
 end
 
 """
-    lm_solve(F, J, x0; ftol=1e-12, maxit=80, lam0=1e-4, up=4.0, down=3.0, lammax=1e12) -> (x, resid)
-
-Self-contained Levenberg-Marquardt solver for the square system `F(x)=0`, used as a fallback when the
-`:trust_region` solve stalls at a residual plateau (a near-singular Jacobian on which the dogleg step
-makes no progress -- seen at low +V near a YSR resonance). Minimises `||F||^2` via the damped normal
-equations
-
-    (JᵀJ + λ·diag(JᵀJ)) δ = -Jᵀ F ,
-
-taking the step only when `||F||` decreases (then `λ /= down`) and otherwise increasing the damping
-(`λ *= up`, up to `lammax`) and retrying. The `λ·diag(JᵀJ)` term shifts the singular values of `J`
-strictly positive, so the step stays well-defined and downhill even where `J` is near-singular. It
-does NOT move the root: the regularisation only affects the step direction, not the fixed point of
-`F=0`. Uses only LinearAlgebra. Starting from a good warm start `x0` (e.g. the stalled trust-region
-iterate); returns the best iterate found and its residual norm. `stepped=false` (no `||F||`-reducing
-step even at maximal damping) signals a genuine local minimum of `||F||^2` and stops early.
-"""
-function lm_solve(F, J, x0; ftol = 1e-12, maxit = 80, lam0 = 1e-4, up = 4.0, down = 3.0, lammax = 1e12)
-    x = copy(x0); fx = F(x); nf = norm(fx); lam = lam0;
-    for it in 1:maxit
-        if nf < ftol 
-            break
-        end
-        Jx = J(x); A = Jx' * Jx; g = Jx' * fx; D = Diagonal(diag(A) .+ 1e-30);
-        stepped = false
-        for _ in 1:20
-            δ = -(A + lam*D) \ g
-            xn = x .+ δ; fn = F(xn); nfn = norm(fn)
-            if nfn < nf
-                x = xn; fx = fn; nf = nfn; lam = max(lam/down, 1e-14)
-                stepped = true
-                break
-            else
-                lam = min(lam*up, lammax)
-            end
-        end
-        stepped || break     # no ||F||-reducing step even at maximal damping -> genuine local minimum
-    end
-    return x, nf
-end
-
-"""
     phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma,
              JL, KL, JR, KR) -> (Iv, Vipsol, residualarr)
 
@@ -2520,18 +2478,24 @@ harmonics needed grows toward low bias. Each point begins at the PREVIOUS conver
 (non-decreasing down the sweep, starting from `Nf_start`) and `Nf` is increased in steps of 2 --
 re-seeding by zero-padding the previous solution ([`embed_seed`](@ref)) -- whenever the solve misses
 `tol_accept` OR the converged spectrum still carries weight at the cutoff ([`edgepeak`](@ref) >
-`edge_tol`, i.e. the window is too narrow), up to the ceiling `Nf`. At the ceiling, if the solve is
-still short of `tol_accept`, a Levenberg-Marquardt fallback ([`lm_solve`](@ref)) is run from the stalled
-iterate to try to clear a trust-region stall (near-singular Jacobian). A residual-converged but
-under-resolved point is then kept; a point that still misses `tol_accept` is left as a failure record
-(`Iv = NaN`, so the IV/dIdV curves break at a gap). Solutions are returned zero-padded to the ceiling width.
+`edge_tol`, i.e. the window is too narrow), up to the ceiling `Nf`. Once no more support can be given
+-- the ceiling is reached, or `Nf_sched` has fixed the support -- the trust-region iterate is ACCEPTED
+as it stands, whether or not it met `tol_accept`/`edge_tol`; the per-point log reports the residual and
+edge/peak of any such point so it stays visible. Solutions are returned zero-padded to the ceiling width.
+
+Fixed Floquet schedule (`Nf_sched`, default `nothing`): a Function of the bias (called as
+`Nf_sched(ev)`) or a vector indexed like `evar`, giving the support to use at each point. It
+OVERRIDES the adaptive ratchet above (no growth is attempted) and is capped at the ceiling `Nf`.
+Use it when two sweeps must be truncated identically -- notably the two bias polarities, since the
+ratchet is history-dependent and can otherwise truncate mirrored points at different `Nf`, breaking
+the antisymmetry `I(-V) = -I(V)` that a non-diode configuration must obey.
 
 # Returns
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
 function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
                   ftols = 1e-16, xtols = 1e-13, itermax = 60, tol_accept = 1e-12, scale_current = false,
-                  Nf_start = 20, edge_tol = 1e-3)
+                  Nf_start = 20, edge_tol = 1e-3, Nf_sched = nothing)
     Nfmax = Nf;                          # the positional `Nf` is the ceiling on the adaptive Floquet support
     Nf_start = min(Nf_start, Nfmax);     
 
@@ -2549,7 +2513,11 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
     RN = scale_current ? Keldyshsetup_Floquetn_ext.RN_full(Nfmax, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR) : 1.0;
     scale_current && println("-- current-row equilibration ON: RN = $RN")
 
-    # Adaptive Floquet support: the Floquet spectrum/support widens as |V| falls, so we must increase Nf at
+    # Floquet support. If `Nf_sched` is supplied it fixes the support at every bias point and the
+    # adaptive growth below is bypassed entirely -- use this when two sweeps (e.g. the two bias
+    # polarities) must be truncated identically, since the ratchet below is history-dependent and
+    # can otherwise truncate mirrored points differently.
+    # Adaptive path (Nf_sched === nothing): the Floquet spectrum/support widens as |V| falls, so we must increase Nf at
     # low bias. Start at Nf_start (largest |V|), for each lower-|V| point begin at the previous converged
     # support and grow Nf_try by 2 whenever the solve misses tol_accept or the converged Floquet spectrum 
     # still has weight at the cutoff (edgepeak > edge_tol). Floquet modes Nf_try capped at Nfmax.
@@ -2565,14 +2533,21 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
         # ---- Adaptive Floquet support: grow Nf until the solve converges AND the spectrum fits ----
         # Start at the previous converged support (>= rule); grow by 2 -- re-seeding by zero-padding the
         # previous solution -- whenever the residual misses tol_accept or the spectrum still hits the cutoff.
-        Nf_try = have_prev ? Nfprev : Nf_start
+        # Floquet support for this point. A supplied `Nf_sched` overridesS the adaptive
+        # ratchet. It is capped at the ceiling `Nf`, and floored at the
+        # previous point's support because `embed_seed` can widen but not shrink the
+        # continuation seed -- for a schedule monotone in |V| that floor never binds.
+        Nf_try = if Nf_sched === nothing
+            have_prev ? Nfprev : Nf_start
+        else
+            nreq = Nf_sched isa Function ? Nf_sched(ev) : Nf_sched[hi]
+            min(Nfmax, max(ceil(Int, nreq), have_prev ? Nfprev : 1))
+        end
         xacc = Float64[] # accepted solution
         racc = NaN # accepted residual
-        Nf_acc = Nf_try 
-        accepted = false 
-        # resolved = true only when a solve satisfies both criteria: resid < tol_accept and edgepeak < edge_tol
-        # resolved stays false if the point is accepted with resid < tol_accept but edgepeak still above edge_tol, 
-        # i.e., the spectrum is still spilling the cutoff.
+        Nf_acc = Nf_try
+        # resolved = true only when a solve satisfies both criteria: resid < tol_accept and edgepeak < edge_tol.
+        # Every point is accepted either way; resolved only flags whether it met both, for the log.
         resolved = false
         while true
             if have_prev
@@ -2595,24 +2570,12 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
             println("   Nf = $Nf_try : residual = $resid, edge/peak = $(round(ep, sigdigits=3)), time = $(round(time()-t0, digits=2))");
 
             if resid < tol_accept && ep < edge_tol
-                accepted = true; resolved = true; break  # converged and the spectrum fits the window
-            elseif Nf_try + 2 <= Nfmax
-                Nf_try += 2     # widen the Floquet window and retry
+                resolved = true; break  # converged and the spectrum fits the window
+            elseif Nf_sched === nothing && Nf_try + 2 <= Nfmax
+                Nf_try += 2     # widen the Floquet window and retry (adaptive mode only;
+                                # a schedule fixes the support, so accept what the solve gave)
             else
-                # Ceiling reached and still short of tol_accept: the trust-region solve has stalled on a
-                # residual plateau (near-singular Jacobian, typically low +V near a YSR resonance). Fall
-                # back to Levenberg-Marquardt from the stalled iterate -- it regularises J'J and can make
-                # progress where the dogleg step is rejected. Keep whichever iterate has the smaller residual.
-                if resid >= tol_accept
-                    t1 = time();
-                    xlm, rlm = Keldyshsetup_Floquetn_ext.lm_solve(Fs, Js, res.zero; ftol = tol_accept);
-                    if rlm < racc
-                        xacc = xlm; racc = rlm;
-                    end
-                    println("   Nf = $Nf_try : LM fallback residual = $racc, edge/peak = $(round(Keldyshsetup_Floquetn_ext.edgepeak(xacc, Nf_try), sigdigits=3)), time = $(round(time()-t1, digits=2))");
-                end
-                accepted = racc < tol_accept
-                resolved = accepted && Keldyshsetup_Floquetn_ext.edgepeak(xacc, Nf_acc) < edge_tol
+                # No more support to give. Accept the trust-region iterate as it stands.
                 break
             end
         end
@@ -2621,24 +2584,19 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
         residualarr[hi] = racc
         Nfused[hi] = Nf_acc
 
-        if accepted
-            # advance the (non-decreasing) support anchor, then find the DC current at the used support
-            have_prev = true; xprev = xacc; Nfprev = Nf_acc;
-            VipI = zeros(ComplexF64, 4*Nf_acc+1);
-            for kl = 1:2*Nf_acc
-                VipI[2*kl] = xacc[kl] + im*xacc[(2*Nf_acc)+kl];
-            end
-            Iif = ws == 4 ? Keldyshsetup_Floquetn_ext.current_Floquet_T4(war0, Omega, Nf_acc, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi) :
-                  ws == 2 ? Keldyshsetup_Floquetn_ext.current_Floquet_T2(war0, Omega, Nf_acc, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi) :
-                            Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf_acc, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi);
-            Iv[hi] = real(sum(diag(Iif)));
-            println(resolved ? "-- ev iter $hi converged at Nf = $Nf_acc (residual = $racc)" :
-                               "-- ev iter $hi converged at ceiling Nf = $Nfmax but under-resolved (edge/peak = $(round(Keldyshsetup_Floquetn_ext.edgepeak(xacc, Nf_acc), sigdigits=3)))")
-        else
-            Iv[hi] = NaN;                                          # residual did not converge even at the ceiling
-                                                                   # NaN (not 0) so the IV/dIdV lines break at a gap
-            println("-- ev iter $hi failed at ceiling Nf = $Nfmax (residual = $racc); Iv = NaN")
+        # Every point is accepted: advance the (non-decreasing) support anchor, then find the DC
+        # current at the used support.
+        have_prev = true; xprev = xacc; Nfprev = Nf_acc;
+        VipI = zeros(ComplexF64, 4*Nf_acc+1);
+        for kl = 1:2*Nf_acc
+            VipI[2*kl] = xacc[kl] + im*xacc[(2*Nf_acc)+kl];
         end
+        Iif = ws == 4 ? Keldyshsetup_Floquetn_ext.current_Floquet_T4(war0, Omega, Nf_acc, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi) :
+              ws == 2 ? Keldyshsetup_Floquetn_ext.current_Floquet_T2(war0, Omega, Nf_acc, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi) :
+                        Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf_acc, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi);
+        Iv[hi] = real(sum(diag(Iif)));
+        println(resolved ? "-- ev iter $hi converged at Nf = $Nf_acc (residual = $racc)" :
+                           "-- ev iter $hi accepted at Nf = $Nf_acc WITHOUT meeting tolerance (residual = $racc, edge/peak = $(round(Keldyshsetup_Floquetn_ext.edgepeak(xacc, Nf_acc), sigdigits=3)))")
     end
 
     println("-- Nf used per ev iter (index = hi): ", Nfused)

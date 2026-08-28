@@ -26,7 +26,7 @@ using Printf
 Nf = 32;
 
 #energies
-mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 0.01;
+mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 0.05;
 dw0 = minimum([0.015, Gamma/2]);
 
 #classical-spin impurities (units of Delta): J = (Jx,Jy,Jz) exchange, K potential
@@ -45,8 +45,8 @@ println("YSR energies E/Δ  | L lead: analytical=$(round.(EYSR_La./delta, digits
 println("                  | R lead: analytical=$(round.(EYSR_Ra./delta, digits=5)) numerical=$(round.(EYSR_Rn./delta, digits=5))")
 
 #voltage (same grid as the current-biased run's positive branch)
-Nev = 200; evar = delta*range(0.24, 2.4, Nev);
-# Nev1 = 160; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+# Nev = 200; evar = delta*range(0.24, 2.4, Nev);
+Nev1 = 180; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 
 #Lesser self energy
 
