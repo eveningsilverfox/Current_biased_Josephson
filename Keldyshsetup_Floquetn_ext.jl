@@ -2530,18 +2530,22 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
         Nw0 = 2*ceil(Int, abs(Omega)/(2*dw0));                             # even cell count: PH-symmetric midpoint sampling
         war0 = -0.5*abs(Omega) .+ ((0:Nw0-1) .+ 0.5) .* (abs(Omega)/Nw0);  # midpoint rule: no sample on the T=0 occupation step
 
-        # ---- Adaptive Floquet support: grow Nf until the solve converges AND the spectrum fits ----
+        # ---- Adaptive Floquet support: grow Nf until the solve converges and the spectrum fits ----
         # Start at the previous converged support (>= rule); grow by 2 -- re-seeding by zero-padding the
         # previous solution -- whenever the residual misses tol_accept or the spectrum still hits the cutoff.
-        # Floquet support for this point. A supplied `Nf_sched` overridesS the adaptive
-        # ratchet. It is capped at the ceiling `Nf`, and floored at the
-        # previous point's support because `embed_seed` can widen but not shrink the
-        # continuation seed -- for a schedule monotone in |V| that floor never binds.
-        Nf_try = if Nf_sched === nothing
-            have_prev ? Nfprev : Nf_start
+        # Floquet support for this point. A supplied `Nf_sched` overrides the adaptive ratchet.
+        local Nf_try::Int
+        if Nf_sched === nothing
+            # Adaptive: resume at the previous point's converged support; the first point has no
+            # previous, so it starts at Nf_start.
+            Nf_try = have_prev ? Nfprev : Nf_start
         else
+            # Scheduled: look up this point's requested support, as a function of the bias or as a
+            # vector indexed like `evar`.
             nreq = Nf_sched isa Function ? Nf_sched(ev) : Nf_sched[hi]
-            min(Nfmax, max(ceil(Int, nreq), have_prev ? Nfprev : 1))
+            nreq = ceil(Int, nreq)
+            Nf_floor = have_prev ? Nfprev : 1 # Floor at the previous point's support
+            Nf_try = min(Nfmax, max(nreq, Nf_floor))   # never below the floor, never above the ceiling
         end
         xacc = Float64[] # accepted solution
         racc = NaN # accepted residual
