@@ -26,7 +26,7 @@ using Printf
 Nf = 32;
 
 #energies
-mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 0.05;
+mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 0.01;
 dw0 = minimum([0.015, Gamma/2]);
 
 #classical-spin impurities (units of Delta): J = (Jx,Jy,Jz) exchange, K potential

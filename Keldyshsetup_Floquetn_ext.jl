@@ -1655,9 +1655,15 @@ function IbiasResidual_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, K
             Ifa[-(kl-lm)+(2*Nf+1)] = Ifa[-(kl-lm)+(2*Nf+1)] + Iif[-kl+Nf+1,-lm+Nf+1];
         end
     end
+    # Reality-symmetrised bias condition. A_s (stored at Ifa[c-s], c=2Nf+1) is a one-sided
+    # precursor: at finite Nf it is NOT conjugate-symmetric, A_{-s} != conj(A_s), so the
+    # reconstructed I(t) is complex and nulling A_{+2h} alone leaves A_{-2h} finite. The
+    # physical harmonic is the real part, I_s = (A_s + conj(A_{-s}))/2, which satisfies
+    # I_{-s} = conj(I_s) identically at any Nf. Derivation: docs/current_reality/.
     Threads.@threads for hi = 1:Nf
-        eqns[(2*Nf)+hi] = real(Ifa[-2*hi+(2*Nf+1)]);
-        eqns[(2*Nf+Nf)+hi] = imag(Ifa[-2*hi+(2*Nf+1)]);
+        sm = -2*hi+(2*Nf+1); sp = 2*hi+(2*Nf+1);            # slots of A_{+2h} and A_{-2h}
+        eqns[(2*Nf)+hi]    = 0.5*( real(Ifa[sm]) + real(Ifa[sp]) );
+        eqns[(2*Nf+Nf)+hi] = 0.5*( imag(Ifa[sm]) - imag(Ifa[sp]) );
     end
 
     println("iterprint = ",iterprint)
@@ -1704,9 +1710,13 @@ function IbiasResidual_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, 
             Ifa[-(kl-lm)+(2*Nf+1)] = Ifa[-(kl-lm)+(2*Nf+1)] + Iif[-kl+Nf+1,-lm+Nf+1];
         end
     end
-    Threads.@threads for hi = 1:Nf #odd harmonics are 0 anyway (gets better as no. of Floquet modes increases). So manually set the non-zero even harmonics to 0.
-        eqns[(2*Nf)+hi] = real(Ifa[-2*hi+(2*Nf+1)]);
-        eqns[(2*Nf+Nf)+hi] = imag(Ifa[-2*hi+(2*Nf+1)]);
+    # Reality-symmetrised bias condition, as in IbiasResidual_Tfull: the physical harmonic
+    # is I_s = (A_s + conj(A_{-s}))/2, not the one-sided A_s. See docs/current_reality/.
+    # (odd harmonics are 0 anyway, improving with the number of Floquet modes.)
+    Threads.@threads for hi = 1:Nf
+        sm = -2*hi+(2*Nf+1); sp = 2*hi+(2*Nf+1);            # slots of A_{+2h} and A_{-2h}
+        eqns[(2*Nf)+hi]    = 0.5*( real(Ifa[sm]) + real(Ifa[sp]) );
+        eqns[(2*Nf+Nf)+hi] = 0.5*( imag(Ifa[sm]) - imag(Ifa[sp]) );
     end
 
     println("iterprint = ",iterprint)
@@ -1752,9 +1762,13 @@ function IbiasResidual_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, 
             Ifa[-(kl-lm)+(2*Nf+1)] = Ifa[-(kl-lm)+(2*Nf+1)] + Iif[-kl+Nf+1,-lm+Nf+1];
         end
     end
-    Threads.@threads for hi = 1:Nf #odd harmonics are 0 anyway (gets better as no. of Floquet modes increases). So manually set the non-zero even harmonics to 0.
-        eqns[(2*Nf)+hi] = real(Ifa[-2*hi+(2*Nf+1)]);
-        eqns[(2*Nf+Nf)+hi] = imag(Ifa[-2*hi+(2*Nf+1)]);
+    # Reality-symmetrised bias condition, as in IbiasResidual_Tfull: the physical harmonic
+    # is I_s = (A_s + conj(A_{-s}))/2, not the one-sided A_s. See docs/current_reality/.
+    # (odd harmonics are 0 anyway, improving with the number of Floquet modes.)
+    Threads.@threads for hi = 1:Nf
+        sm = -2*hi+(2*Nf+1); sp = 2*hi+(2*Nf+1);            # slots of A_{+2h} and A_{-2h}
+        eqns[(2*Nf)+hi]    = 0.5*( real(Ifa[sm]) + real(Ifa[sp]) );
+        eqns[(2*Nf+Nf)+hi] = 0.5*( imag(Ifa[sm]) - imag(Ifa[sp]) );
     end
 
     println("iterprint = ",iterprint)
@@ -1964,9 +1978,12 @@ function IbiasJacobian_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, K
     end
 
     # Current rows: bias condition I_{2h}=0 -> rows 2Nf+hi / 3Nf+hi are dRe/dIm I_{2h}
+    # Same reality symmetrisation as the residual: d/dx of I_s = (A_s + conj(A_{-s}))/2.
+    # The unknowns are real, so conjugation commutes with the derivative.
     Threads.@threads for hi = 1:Nf
-        jaceqns[(2*Nf)+hi,:] = transpose(real(jacIfa[:,-2*hi+(2*Nf+1)]));
-        jaceqns[(2*Nf+Nf)+hi,:] = transpose(imag(jacIfa[:,-2*hi+(2*Nf+1)]));
+        sm = -2*hi+(2*Nf+1); sp = 2*hi+(2*Nf+1);
+        jaceqns[(2*Nf)+hi,:]    = transpose( 0.5*( real(jacIfa[:,sm]) + real(jacIfa[:,sp]) ) );
+        jaceqns[(2*Nf+Nf)+hi,:] = transpose( 0.5*( imag(jacIfa[:,sm]) - imag(jacIfa[:,sp]) ) );
     end
 
     println(" (jac) iterprint = ",iterprint)
@@ -2133,9 +2150,12 @@ function IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, 
 
     # Current rows of the Jacobian: the bias condition is I_{2h}=0, so rows 2Nf+hi /
     # 3Nf+hi are ∂Re(I_{2h})/∂x and ∂Im(I_{2h})/∂x for h=hi=1..Nf (even harmonics 2h).
+    # Same reality symmetrisation as the residual: d/dx of I_s = (A_s + conj(A_{-s}))/2.
+    # The unknowns are real, so conjugation commutes with the derivative.
     Threads.@threads for hi = 1:Nf
-        jaceqns[(2*Nf)+hi,:] = transpose(real(jacIfa[:,-2*hi+(2*Nf+1)]));
-        jaceqns[(2*Nf+Nf)+hi,:] = transpose(imag(jacIfa[:,-2*hi+(2*Nf+1)]));
+        sm = -2*hi+(2*Nf+1); sp = 2*hi+(2*Nf+1);
+        jaceqns[(2*Nf)+hi,:]    = transpose( 0.5*( real(jacIfa[:,sm]) + real(jacIfa[:,sp]) ) );
+        jaceqns[(2*Nf+Nf)+hi,:] = transpose( 0.5*( imag(jacIfa[:,sm]) - imag(jacIfa[:,sp]) ) );
     end
 
     println(" (jac) iterprint = ",iterprint)
@@ -2356,9 +2376,12 @@ function IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, 
 
     # Current rows of the Jacobian: the bias condition is I_{2h}=0, so rows 2Nf+hi /
     # 3Nf+hi are ∂Re(I_{2h})/∂x and ∂Im(I_{2h})/∂x for h=hi=1..Nf (even harmonics 2h).
+    # Same reality symmetrisation as the residual: d/dx of I_s = (A_s + conj(A_{-s}))/2.
+    # The unknowns are real, so conjugation commutes with the derivative.
     Threads.@threads for hi = 1:Nf
-        jaceqns[(2*Nf)+hi,:] = transpose(real(jacIfa[:,-2*hi+(2*Nf+1)]));
-        jaceqns[(2*Nf+Nf)+hi,:] = transpose(imag(jacIfa[:,-2*hi+(2*Nf+1)]));
+        sm = -2*hi+(2*Nf+1); sp = 2*hi+(2*Nf+1);
+        jaceqns[(2*Nf)+hi,:]    = transpose( 0.5*( real(jacIfa[:,sm]) + real(jacIfa[:,sp]) ) );
+        jaceqns[(2*Nf+Nf)+hi,:] = transpose( 0.5*( imag(jacIfa[:,sm]) - imag(jacIfa[:,sp]) ) );
     end
 
     println(" (jac) iterprint = ",iterprint)
@@ -2479,23 +2502,16 @@ harmonics needed grows toward low bias. Each point begins at the PREVIOUS conver
 re-seeding by zero-padding the previous solution ([`embed_seed`](@ref)) -- whenever the solve misses
 `tol_accept` OR the converged spectrum still carries weight at the cutoff ([`edgepeak`](@ref) >
 `edge_tol`, i.e. the window is too narrow), up to the ceiling `Nf`. Once no more support can be given
--- the ceiling is reached, or `Nf_sched` has fixed the support -- the trust-region iterate is ACCEPTED
+-- the ceiling is reached -- the trust-region iterate is accepted 
 as it stands, whether or not it met `tol_accept`/`edge_tol`; the per-point log reports the residual and
 edge/peak of any such point so it stays visible. Solutions are returned zero-padded to the ceiling width.
-
-Fixed Floquet schedule (`Nf_sched`, default `nothing`): a Function of the bias (called as
-`Nf_sched(ev)`) or a vector indexed like `evar`, giving the support to use at each point. It
-OVERRIDES the adaptive ratchet above (no growth is attempted) and is capped at the ceiling `Nf`.
-Use it when two sweeps must be truncated identically -- notably the two bias polarities, since the
-ratchet is history-dependent and can otherwise truncate mirrored points at different `Nf`, breaking
-the antisymmetry `I(-V) = -I(V)` that a non-diode configuration must obey.
 
 # Returns
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
 function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
                   ftols = 1e-16, xtols = 1e-13, itermax = 60, tol_accept = 1e-12, scale_current = false,
-                  Nf_start = 20, edge_tol = 1e-3, Nf_sched = nothing)
+                  Nf_start = 20, edge_tol = 1e-3)
     Nfmax = Nf;                          # the positional `Nf` is the ceiling on the adaptive Floquet support
     Nf_start = min(Nf_start, Nfmax);     
 
@@ -2513,11 +2529,7 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
     RN = scale_current ? Keldyshsetup_Floquetn_ext.RN_full(Nfmax, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR) : 1.0;
     scale_current && println("-- current-row equilibration ON: RN = $RN")
 
-    # Floquet support. If `Nf_sched` is supplied it fixes the support at every bias point and the
-    # adaptive growth below is bypassed entirely -- use this when two sweeps (e.g. the two bias
-    # polarities) must be truncated identically, since the ratchet below is history-dependent and
-    # can otherwise truncate mirrored points differently.
-    # Adaptive path (Nf_sched === nothing): the Floquet spectrum/support widens as |V| falls, so we must increase Nf at
+    # Floquet support: the Floquet spectrum/support widens as |V| falls, so we must increase Nf at
     # low bias. Start at Nf_start (largest |V|), for each lower-|V| point begin at the previous converged
     # support and grow Nf_try by 2 whenever the solve misses tol_accept or the converged Floquet spectrum 
     # still has weight at the cutoff (edgepeak > edge_tol). Floquet modes Nf_try capped at Nfmax.
@@ -2533,20 +2545,9 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
         # ---- Adaptive Floquet support: grow Nf until the solve converges and the spectrum fits ----
         # Start at the previous converged support (>= rule); grow by 2 -- re-seeding by zero-padding the
         # previous solution -- whenever the residual misses tol_accept or the spectrum still hits the cutoff.
-        # Floquet support for this point. A supplied `Nf_sched` overrides the adaptive ratchet.
-        local Nf_try::Int
-        if Nf_sched === nothing
-            # Adaptive: resume at the previous point's converged support; the first point has no
-            # previous, so it starts at Nf_start.
-            Nf_try = have_prev ? Nfprev : Nf_start
-        else
-            # Scheduled: look up this point's requested support, as a function of the bias or as a
-            # vector indexed like `evar`.
-            nreq = Nf_sched isa Function ? Nf_sched(ev) : Nf_sched[hi]
-            nreq = ceil(Int, nreq)
-            Nf_floor = have_prev ? Nfprev : 1 # Floor at the previous point's support
-            Nf_try = min(Nfmax, max(nreq, Nf_floor))   # never below the floor, never above the ceiling
-        end
+        # Floquet support for this point: resume at the previous point's converged support
+        # (non-decreasing down the sweep); the first point starts at Nf_start.
+        Nf_try = have_prev ? Nfprev : Nf_start
         xacc = Float64[] # accepted solution
         racc = NaN # accepted residual
         Nf_acc = Nf_try
@@ -2575,9 +2576,8 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
 
             if resid < tol_accept && ep < edge_tol
                 resolved = true; break  # converged and the spectrum fits the window
-            elseif Nf_sched === nothing && Nf_try + 2 <= Nfmax
-                Nf_try += 2     # widen the Floquet window and retry (adaptive mode only;
-                                # a schedule fixes the support, so accept what the solve gave)
+            elseif Nf_try + 2 <= Nfmax
+                Nf_try += 2     # widen the Floquet window and retry
             else
                 # No more support to give. Accept the trust-region iterate as it stands.
                 break
