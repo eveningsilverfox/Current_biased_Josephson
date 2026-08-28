@@ -70,8 +70,7 @@ edge_tol = 1e-3;    # grow Nf until |W| at the cutoff is below this fraction of 
 
 
 #Current-row equilibration (phisolve scale_current). Row-scale the current-nulling equations
-#and their Jacobian rows by RN so all equations are O(Delta). Does NOT move the root; changes
-#the actual convergence path. 
+#and their Jacobian rows by RN so all equations are O(Delta). Does not move the root. 
 scale_current = true;
 
 #naming

@@ -2482,29 +2482,27 @@ previous converged solution, zero-padded into the current Floquet window via [`e
 Keyword arguments `ftols` (1e-16), `xtols` (1e-13), `itermax` (60) override the nlsolve exit
 criteria; `tol_accept` (1e-12) is the residual below which a point counts as converged. Adaptive
 Floquet support is controlled by `Nf_start` (20, the support at the largest |V|) and `edge_tol`
-(1e-3); the positional `Nf` is the CEILING (maximum support). Keywords can be given in any order.
+(1e-3); the positional `Nf` is the ceiling (maximum support). Keywords can be given in any order.
 
 Row equilibration (`scale_current`, default `false`): when enabled, the current-nulling rows
 `2Nf+1:4Nf` of both `F` and its Jacobian are multiplied by `RN` (from [`RN_full`](@ref)) so
 they become O(Delta) like the unitarity/gauge rows (raw scale `Ic ~ Delta/RN`). This leaves
 the root unchanged (row scaling is exact-Newton invariant), so it cannot create a missing
-root. It DOES change the `:trust_region` PATH, though: the dogleg merit `||D f||^2` has
+root. It does change the `:trust_region` path, though: the dogleg merit `||D f||^2` has
 gradient `J'D^2 f` skewed by the `RN^2` weighting, so trial steps are rejected and the
-Jacobian is recomputed several times per accepted iteration (~4x the Jacobian evaluations,
-~1.6-3.7x wall-time in tests). That path change may help OR hurt reaching an existing root at
-hard points (empirically TBD), so it is OFF by default (most points converge fine and faster
-unscaled) and kept as an opt-in. With it on, `residualarr` and the `ftol`/`tol_accept` tests
-are in the scaled metric.
+Jacobian is recomputed several times per accepted iteration. That path change may help or 
+hurt reaching an existing root at hard points and kept as an opt-in. With it on, `residualarr` 
+and the `ftol`/`tol_accept` tests are in the scaled metric.
 
 Adaptive Floquet support (ws=0): the phase spectrum widens as |V| falls, so the number of Floquet
-harmonics needed grows toward low bias. Each point begins at the PREVIOUS converged support
+harmonics needed grows toward low bias. Each point begins at the previous converged support
 (non-decreasing down the sweep, starting from `Nf_start`) and `Nf` is increased in steps of 2 --
 re-seeding by zero-padding the previous solution ([`embed_seed`](@ref)) -- whenever the solve misses
-`tol_accept` OR the converged spectrum still carries weight at the cutoff ([`edgepeak`](@ref) >
+`tol_accept` or the converged spectrum still carries weight at the cutoff ([`edgepeak`](@ref) >
 `edge_tol`, i.e. the window is too narrow), up to the ceiling `Nf`. Once no more support can be given
--- the ceiling is reached -- the trust-region iterate is accepted 
-as it stands, whether or not it met `tol_accept`/`edge_tol`; the per-point log reports the residual and
-edge/peak of any such point so it stays visible. Solutions are returned zero-padded to the ceiling width.
+-- the ceiling is reached -- the trust-region iterate is accepted as it stands, whether or not it met 
+`tol_accept`/`edge_tol`; the per-point log reports the residual and edge/peak of any such point so it 
+stays visible. Solutions are returned zero-padded to the ceiling width.
 
 # Returns
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
