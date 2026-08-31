@@ -26,27 +26,29 @@ using Printf
 Nf = 32;
 
 #energies
-mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 0.01;
+mu = 0; delta = 1; zeta = 5; T = 0.001; Gamma = 0.05;
 dw0 = minimum([0.015, Gamma/2]);
 
 #classical-spin impurities (units of Delta): J = (Jx,Jy,Jz) exchange, K potential
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 result)
 #  collinear YSR:      JL=JR=[0,0,Jz]
 #  non-collinear/diode: rotate JR relative to JL, e.g. JR=Jz*[sin(th),0,cos(th)]
-JL = [0.0, 0.0, 3.0]; KL = 0.0;
+JL = [0.0, 0.0, 3.0]; KL = 1.0;
 JR = [0.0, 0.0, 0.0]; KR = 0.0;
 
 #YSR bound-state energies (in-gap poles of each lead's impurity-dressed surface GF)
-EYSR_La = Keldyshsetup_Floquetn_ext.ysr_energies_analytical(JL, KL, zeta, delta);
-EYSR_Ra = Keldyshsetup_Floquetn_ext.ysr_energies_analytical(JR, KR, zeta, delta);
 EYSR_Ln = Keldyshsetup_Floquetn_ext.ysr_energies_numerical(JL, KL, zeta, delta);
 EYSR_Rn = Keldyshsetup_Floquetn_ext.ysr_energies_numerical(JR, KR, zeta, delta);
-println("YSR energies E/Δ  | L lead: analytical=$(round.(EYSR_La./delta, digits=5)) numerical=$(round.(EYSR_Ln./delta, digits=5))")
-println("                  | R lead: analytical=$(round.(EYSR_Ra./delta, digits=5)) numerical=$(round.(EYSR_Rn./delta, digits=5))")
+println("YSR energies E/Δ  | L lead: $(round.(EYSR_Ln./delta, digits=5))")
+println("                  | R lead: $(round.(EYSR_Rn./delta, digits=5))")
 
-#voltage (same grid as the current-biased run's positive branch)
-# Nev = 200; evar = delta*range(0.24, 2.4, Nev);
-Nev1 = 180; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+#voltage
+signed_evar = true;
+if signed_evar
+    Nev1 = 400; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+else
+    Nev = 400; evar = delta*range(0.24, 3.2, Nev);
+end
 
 #Lesser self energy
 
@@ -92,15 +94,17 @@ for hi = 1:Nev
     Iv[hi] = real(sum(diag(If[hi,:,:])));
 end
 
-# CENTRED differences (a forward difference biases every peak by dV/2, which is
-# comparable to the current-vs-voltage-bias shifts being compared here)
+# Centred differences
 dVg = evar[2]-evar[1];
 dIdv = zeros(Float64, Nev);
-for hi = 2:Nev-1
-    dIdv[hi] = (Iv[hi+1]-Iv[hi-1]) / (2*dVg);
+for br in (signed_evar ? (1:Nev1, Nev1+1:Nev) : (1:Nev,))
+    a, b = first(br), last(br);
+    for hi = a+1:b-1
+        dIdv[hi] = (Iv[hi+1]-Iv[hi-1]) / (evar[hi+1]-evar[hi-1]);
+    end
+    dIdv[a] = (-3*Iv[a] + 4*Iv[a+1] - Iv[a+2]) / (2*dVg);   # one-sided, 2nd order
+    dIdv[b] = ( 3*Iv[b] - 4*Iv[b-1] + Iv[b-2]) / (2*dVg);
 end
-dIdv[1]   = (-3*Iv[1]   + 4*Iv[2]     - Iv[3])     / (2*dVg);
-dIdv[Nev] = ( 3*Iv[Nev] - 4*Iv[Nev-1] + Iv[Nev-2]) / (2*dVg);
 
 ## ------------RN--------------
 RN = Keldyshsetup_Floquetn_ext.RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR);
@@ -115,29 +119,55 @@ save("IV_Vbias_" * str2 * ".jld", "evar", collect(evar), "Iv", Iv, "dIdv", dIdv,
 #   (D+Ey)/n  MARs that start OR end on the YSR level
 #   2Ey/n     MARs between YSR states (forbidden in their spin-polarised model)
 EyL      = abs(EYSR_Ln[2])/delta;
-thr_MAR  = [2/n       for n in 1:6];
-thr_YSR1 = [(1+EyL)/n for n in 1:6];
-thr_YSR2 = [2*EyL/n   for n in 1:6];
+thr_MAR  = [2/n       for n in 1:3];
+thr_YSR1 = [(1+EyL)/n for n in 1:3];
+thr_YSR2 = [2*EyL/n   for n in 1:3];
 
 ## ----------Plots----------
 # YSR energy annotation (numerical, positive in-gap pole, in units of Δ)
 ysrLval = round(EYSR_Ln[2]/delta, digits=3); ysrRval = round(EYSR_Rn[2]/delta, digits=3);
 ysrttl = latexstring("\\epsilon_{YSR,L}/\\Delta=$(ysrLval),\\quad \\epsilon_{YSR,R}/\\Delta=$(ysrRval)");
 
-p2 = plot(evar/delta, Iv * RN, lc=:blue, label=L"I", lw=1.5, framestyle=:box)
+
+if signed_evar
+    p2 = plot(evar[1:Nev1]./delta,  (Iv.*RN)[1:Nev1],  lc=:blue, lw=1.5, framestyle=:box, label="")
+    plot!(p2, evar[Nev1+1:Nev]./delta, (Iv.*RN)[Nev1+1:Nev], lc=:blue, lw=1.5, label="")
+else
+    p2 = plot(evar./delta,  (Iv.*RN),  lc=:blue, lw=1.5, framestyle=:box, label="")
+end
 vline!(p2, thr_MAR,  ls=:dash,    lc=:red,    lw=0.9, label=L"2\Delta/n")
 vline!(p2, thr_YSR1, ls=:dot,     lc=:green,  lw=1.1, label=L"(\Delta+\epsilon_{YSR})/n")
 vline!(p2, thr_YSR2, ls=:dashdot, lc=:purple, lw=0.9, label=L"2\epsilon_{YSR}/n")
-xlabel!(L"eV/\Delta"); ylabel!(L"I(V) R_N")
-plot!(p2, title=ysrttl, titlefontsize=11, legend=:topleft, legendfontsize=9,
-      tickfontsize=17, guidefontsize=17, size=(560,440), top_margin=3Plots.mm)
+xlabel!(L"eV/\Delta"); ylabel!(L"I eR_N/\Delta")
+plot!(p2, legend=:topleft, legendfontsize=16,
+      tickfontsize=20, guidefontsize=24, size=(680,480))   # matches sweep_results_Gam0p05 canvas/fonts/margins exactly (no title, no extra top_margin)
 savefig(plot!(p2, dpi=450), "IV_Vbias_" * str2 * ".png")
 
-p2v = plot(evar/delta, dIdv * RN, lc=:blue, label="", lw=1.5, framestyle=:box)
+if signed_evar
+    p2v = plot(evar[1:Nev1]./delta,  (dIdv.*RN)[1:Nev1],  lc=:blue, lw=1.5, framestyle=:box, label="")
+    plot!(p2v, evar[Nev1+1:Nev]./delta, (dIdv.*RN)[Nev1+1:Nev], lc=:blue, lw=1.5, label="")
+else
+    p2v = plot(evar./delta,  (dIdv.*RN),  lc=:blue, lw=1.5, framestyle=:box, label="")
+end
 vline!(p2v, thr_MAR,  ls=:dash,    lc=:red,    lw=0.9, label=L"2\Delta/n")
 vline!(p2v, thr_YSR1, ls=:dot,     lc=:green,  lw=1.1, label=L"(\Delta+\epsilon_{YSR})/n")
 vline!(p2v, thr_YSR2, ls=:dashdot, lc=:purple, lw=0.9, label=L"2\epsilon_{YSR}/n")
-xlabel!(L"eV/\Delta"); ylabel!(L"(dI/dV) R_N")
-plot!(p2v, title=ysrttl, titlefontsize=11, legend=:topleft, legendfontsize=9,
-      tickfontsize=17, guidefontsize=17, size=(560,440), top_margin=3Plots.mm)
+xlabel!(L"eV/\Delta"); ylabel!(L"(dI/dV) eR_N/\Delta")
+plot!(p2v, legend=:topleft, legendfontsize=16,
+      tickfontsize=20, guidefontsize=24, size=(680,480))   # matches sweep_results_Gam0p05 canvas/fonts/margins exactly (no title, no extra top_margin)
 savefig(plot!(p2v, dpi=450), "dIdV_Vbias_" * str2 * ".png")
+
+if signed_evar
+    Gp = dIdv[Nev1+1:Nev] .* RN;
+    Gm = [dIdv[Nev1+1-k] for k in 1:Nev1] .* RN;
+    pGpGm = plot(evar1./delta, Gp, lc=:blue, ls=:solid, lw=1.6, framestyle=:box, label="+ve V")
+    plot!(pGpGm, evar1./delta, Gm, lc=:blue, ls=:solid, lw=1.6, alpha=0.4, label="-ve V")
+    vline!(pGpGm, thr_MAR,  ls=:dash,    lc=:red,    lw=0.9, label=L"2\Delta/n")
+    vline!(pGpGm, thr_YSR1, ls=:dot,     lc=:green,  lw=1.1, label=L"(\Delta+\epsilon_{YSR})/n")
+    vline!(pGpGm, thr_YSR2, ls=:dashdot, lc=:purple, lw=0.9, label=L"2\epsilon_{YSR}/n")
+    xlabel!(pGpGm, L"|eV|/\Delta"); ylabel!(pGpGm, L"(dI/d|V|) eR_N/\Delta")
+    xlims!(pGpGm, (0, last(evar1)))
+    plot!(pGpGm, legend=:topright, legendfontsize=16,
+          tickfontsize=20, guidefontsize=24, size=(700,480))
+    savefig(plot!(pGpGm, dpi=450), "GpGm_Vbias_" * str2 * ".png")
+end

@@ -16,8 +16,9 @@ mu = 0; delta = 1; zeta = 25; Gamma = 5e-3; T = 0.4;
 dw1 = Gamma/5; Nw1 = 2*ceil(Int, zeta/dw1); war1 = -zeta .+ ((0:Nw1-1) .+ 0.5) .* (2*zeta/Nw1); # even-count midpoint sampling: PH-symmetric, no sample on the T=0 step at w=0
 
 #voltage
+signed_evar = false;
 Nev = 300; evar = 1*range(0.2, 2.4, Nev);
-# Nev1 = 300; evar1 = 1*range(0.2, 2.4, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+# signed_evar = true; Nev1 = 300; evar1 = 1*range(0.2, 2.4, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 
 #naming
 str2 = "Vbiasdirect_Gamma1em3_delta1_zeta10_V260_0p2_2p1";
@@ -71,54 +72,38 @@ Threads.@threads for hi = 1:Nev
     # Idc6_nn[hi] = Keldyshsetup_Floquetn.current_Vbias_MPT_T6_qp(war1, evar[hi], zeta, delta, T, Gamma, War0);
     # Idc6_pair[hi] = Keldyshsetup_Floquetn.current_Vbias_MPT_T6_pair(war1, evar[hi], zeta, delta, T, Gamma, War0);
 end
-dIdvex = zeros(Float64, Nev); 
-dIdv2 = zeros(Float64, Nev); 
-dIdv2_nn = zeros(Float64, Nev); 
-dIdv2_pair = zeros(Float64, Nev); 
-dIdv4 = zeros(Float64, Nev); 
-dIdv4_nn = zeros(Float64, Nev); 
-dIdv4ab1 = zeros(Float64, Nev); 
-dIdv4ab_1 = zeros(Float64, Nev); 
-dIdv4ab_2 = zeros(Float64, Nev); 
-dIdv4ab_3 = zeros(Float64, Nev); 
-dIdv4_pair = zeros(Float64, Nev); 
-dIdv4ab_pair = zeros(Float64, Nev); 
-dIdv4ab_nn = zeros(Float64, Nev);  
-dIdv6 = zeros(Float64, Nev); 
-dIdv6_nn = zeros(Float64, Nev); 
-dIdv6_pair = zeros(Float64, Nev); 
-for hi = 1:Nev-1
-    dIdv2[hi] = (Idc2[hi+1]-Idc2[hi]) ./ (evar[2]-evar[1]);
-    dIdvex[hi] = (Idcex[hi+1]-Idcex[hi]) ./ (evar[2]-evar[1]);
-    dIdv2_nn[hi] = (Idc2_nn[hi+1]-Idc2_nn[hi]) ./ (evar[2]-evar[1]);
-    dIdv2_pair[hi] = (Idc2_pair[hi+1]-Idc2_pair[hi]) ./ (evar[2]-evar[1]);
-    dIdv4[hi] = (Idc4[hi+1]-Idc4[hi]) ./ (evar[2]-evar[1]);
-    dIdv4_nn[hi] = (Idc4_nn[hi+1]-Idc4_nn[hi]) ./ (evar[2]-evar[1]);
-    dIdv4ab_1[hi] = (Idc4ab_1[hi+1]-Idc4ab_1[hi]) ./ (evar[2]-evar[1]);
-    dIdv4ab_2[hi] = (Idc4ab_2[hi+1]-Idc4ab_2[hi]) ./ (evar[2]-evar[1]);
-    dIdv4ab_3[hi] = (Idc4ab_3[hi+1]-Idc4ab_3[hi]) ./ (evar[2]-evar[1]);
-    dIdv4_pair[hi] = (Idc4_pair[hi+1]-Idc4_pair[hi]) ./ (evar[2]-evar[1]);
-    dIdv4ab_pair[hi] = (Idc4ab_pair[hi+1]-Idc4ab_pair[hi]) ./ (evar[2]-evar[1]);
-    dIdv4ab_nn[hi] = (Idc4ab_nn[hi+1]-Idc4ab_nn[hi]) ./ (evar[2]-evar[1]);
-    dIdv6[hi] = (Idc6[hi+1]-Idc6[hi]) ./ (evar[2]-evar[1]);
-    dIdv6_nn[hi] = (Idc6_nn[hi+1]-Idc6_nn[hi]) ./ (evar[2]-evar[1]);
-    dIdv6_pair[hi] = (Idc6_pair[hi+1]-Idc6_pair[hi]) ./ (evar[2]-evar[1]);
+# Centred differences, taken branch by branch (many channels here, so the stencil
+# used by the other drivers is factored into a helper rather than written out once
+# per array).
+dVg = evar[2]-evar[1];
+Nbr = signed_evar ? (1:count(<(0), evar), count(<(0), evar)+1:Nev) : (1:Nev,);
+function dIdV_branch(Idc)
+    d = zeros(Float64, Nev);
+    for br in Nbr
+        a, b = first(br), last(br);
+        for hi = a+1:b-1
+            d[hi] = (Idc[hi+1]-Idc[hi-1]) / (evar[hi+1]-evar[hi-1]);
+        end
+        d[a] = (-3*Idc[a] + 4*Idc[a+1] - Idc[a+2]) / (2*dVg);   # one-sided, 2nd order
+        d[b] = ( 3*Idc[b] - 4*Idc[b-1] + Idc[b-2]) / (2*dVg);
+    end
+    return d;
 end
-dIdv2[Nev] = dIdv2[Nev-1] + (dIdv2[Nev-1]-dIdv2[Nev-2]);
-dIdvex[Nev] = dIdvex[Nev-1] + (dIdvex[Nev-1]-dIdvex[Nev-2]);
-dIdv2[Nev] = dIdv2[Nev-1] + (dIdv2[Nev-1]-dIdv2[Nev-2]);
-dIdv2_nn[Nev] = dIdv2_nn[Nev-1] + (dIdv2_nn[Nev-1]-dIdv2_nn[Nev-2]);
-dIdv2_pair[Nev] = dIdv2_pair[Nev-1] + (dIdv2_pair[Nev-1]-dIdv2_pair[Nev-2]);
-dIdv4[Nev] = dIdv4[Nev-1] + (dIdv4[Nev-1]-dIdv4[Nev-2]);
-dIdv4_nn[Nev] = dIdv4_nn[Nev-1] + (dIdv4_nn[Nev-1]-dIdv4_nn[Nev-2]);
-dIdv4ab_1[Nev] = dIdv4ab_1[Nev-1] + (dIdv4ab_1[Nev-1]-dIdv4ab_1[Nev-2]);
-dIdv4ab_2[Nev] = dIdv4ab_2[Nev-1] + (dIdv4ab_2[Nev-1]-dIdv4ab_2[Nev-2]);
-dIdv4ab_3[Nev] = dIdv4ab_3[Nev-1] + (dIdv4ab_3[Nev-1]-dIdv4ab_3[Nev-2]);
-dIdv4_pair[Nev] = dIdv4_pair[Nev-1] + (dIdv4_pair[Nev-1]-dIdv4_pair[Nev-2]);
-dIdv4ab_pair[Nev] = dIdv4ab_pair[Nev-1] + (dIdv4ab_pair[Nev-1]-dIdv4ab_pair[Nev-2]);
-dIdv4ab_nn[Nev] = dIdv4ab_nn[Nev-1] + (dIdv4ab_nn[Nev-1]-dIdv4ab_nn[Nev-2]);
-dIdv6[Nev] = dIdv6[Nev-1] + (dIdv6[Nev-1]-dIdv6[Nev-2]);
-dIdv6_pair[Nev] = dIdv6_pair[Nev-1] + (dIdv6_pair[Nev-1]-dIdv6_pair[Nev-2]);
+dIdvex       = dIdV_branch(Idcex);
+dIdv2        = dIdV_branch(Idc2);
+dIdv2_nn     = dIdV_branch(Idc2_nn);
+dIdv2_pair   = dIdV_branch(Idc2_pair);
+dIdv4        = dIdV_branch(Idc4);
+dIdv4_nn     = dIdV_branch(Idc4_nn);
+dIdv4ab_1    = dIdV_branch(Idc4ab_1);
+dIdv4ab_2    = dIdV_branch(Idc4ab_2);
+dIdv4ab_3    = dIdV_branch(Idc4ab_3);
+dIdv4_pair   = dIdV_branch(Idc4_pair);
+dIdv4ab_pair = dIdV_branch(Idc4ab_pair);
+dIdv4ab_nn   = dIdV_branch(Idc4ab_nn);
+dIdv6        = dIdV_branch(Idc6);
+dIdv6_nn     = dIdV_branch(Idc6_nn);
+dIdv6_pair   = dIdV_branch(Idc6_pair);
 
 if delta == 0
     GN = (8*pi/(zeta)^2) #1 -> T. T set to 1.

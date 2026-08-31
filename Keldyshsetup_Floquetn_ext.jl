@@ -16,30 +16,29 @@ BLAS.set_num_threads(1) # Avoid contention with threaded loop. Run with julia -t
 #
 # --- Total thread budget and oversubscription ---
 # The total number of worker threads is fixed at startup by `julia -t num_threads`, i.e.
-# num_threads = Threads.nthreads(). The two pools above run NESTED: when a Threads.@threads
-# loop body calls a BLAS routine, the EFFECTIVE concurrency is the PRODUCT
+# num_threads = Threads.nthreads(). The two pools, julia and BLAS threads, run nested: when a 
+# Threads.@threads loop body calls a BLAS routine, the effective concurrency is the product
 #       Threads.nthreads()  x  BLAS.get_num_threads().
-# If both are large this OVERSUBSCRIBES the machine -- e.g. `julia -t16` with MKL's default
+# If both are large this oversubscribed the machine -- e.g. `julia -t16` with MKL's default
 # (~16 BLAS threads) launches ~16 x 16 = 256 threads fighting over ~16 cores, which thrashes
-# caches and is much slower than 16. So the cores must be PARTITIONED between
-#   (a) the Julia for-loop  -- OUTER parallelism: different loop iterations on different
+# caches and is much slower than 16. So the cores must be partitioned between
+#   (a) the Julia for-loop  -- outer parallelism: different loop iterations on different
 #       threads (one whole matrix per thread), and
-#   (b) BLAS               -- INNER parallelism: one mul!/*/\ split across threads.
+#   (b) BLAS               -- inner parallelism: one mul!/*/\ split across threads.
 # We want  nthreads(Julia) x BLAS_threads  ~ (physical cores), not their naive product.
 #
-# --- Design choice for THIS code ---
+# --- Design choice for this code ---
 # 1. Matrices are only small to medium-sized, the regime where BLAS multithreading scales
-#    POORLY (per-call fork/join overhead, limited arithmetic intensity): running whole
-#    matrices concurrently beats splitting one matrix across threads. So we give BLAS a
-#    SINGLE thread (BLAS.set_num_threads(1) above) and hand the ENTIRE thread budget to the
-#    for loop:  nthreads(Julia) x 1 = nthreads, one matrix per thread, no oversubscription.
-# 2. Of the two candidate loops to parallelize -- the Floquet-mode loop (2Nf+1 modes, or the
-#    4Nf Jacobian derivative columns) and the frequency-grid loop (Nw0 = abs(Omega)/dw0 points) --
-#    the number of Floquet modes (tens) is MUCH SMALLER than the number of frequency-grid
+#    poorly: running whole matrices concurrently beats splitting one matrix across threads. 
+#    So we give BLAS a single thread (BLAS.set_num_threads(1) above) and hand the entire thread 
+#    budget to the for loop:  nthreads(Julia) x 1 = nthreads, one matrix per thread, no oversubscription.
+# 2. Of the two candidate loops to parallelize, the Floquet-mode loop (2Nf+1 modes, or the
+#    4Nf Jacobian derivative columns) and the frequency-grid loop (Nw0 = abs(Omega)/dw0 points), 
+#    the number of Floquet modes (tens) is much smaller than the number of frequency-grid
 #    points (hundreds to thousands). So we put the Threads.@threads parallelism on the
-#    FREQUENCY loop (chunked, see IbiasJacobian_Tfull / current_Floquet_Tfull): it exposes
+#    frequency loop (chunked, see IbiasJacobian_Tfull / current_Floquet_Tfull): it exposes
 #    far more independent tasks and keeps every thread busy. This is especially good on HPC
-#    nodes with many threads -- more than the number of Floquet modes -- where the frequency
+#    nodes with many threads, more than the number of Floquet modes, where the frequency
 #    grid still has enough work to saturate all of them, whereas threading the (small)
 #    Floquet/column loop would leave most threads idle.
 
@@ -106,9 +105,9 @@ and a quadratic for `B`, whose decaying root (`g_s -> 0` as `z -> infinity`) is
 
     g_s(z) = C(z) [z delta; delta z],   C(z) = (1 - sqrt(1 - 4 zeta^2/(z^2 - delta^2)))/(2 zeta^2).
 
-This reproduces [`surfacegr`](@ref) to ~3e-13 while costing one sqrt instead of an
+This reproduces `surfacegr` while costing one sqrt instead of an
 eigendecomposition per frequency point. Expanding for large bandwidth,
-`C(z) = -1/(zeta sqrt(delta^2-z^2)) + 1/(2 zeta^2) + ...`, recovers [`gsurf4wb`](@ref) as
+`C(z) = -1/(zeta sqrt(delta^2-z^2)) + 1/(2 zeta^2) + ...`, recovers `gsurf4wb` as
 the leading term; the `1/(2 zeta^2)` correction is the local `z = w + i*Gamma` piece that
 the wide-band limit drops.
 """
@@ -133,6 +132,26 @@ function gsurf4ex(z, zeta, delta)
 end
 
 """
+    gsurf4ex_eigen(ww, Gamma, zeta, delta) -> Matrix{ComplexF64}
+
+Clean (undressed) 4x4 surface Green's function at real energy `ww` with broadening
+`Gamma`, built from the finite-band transfer-matrix 2x2 surface GF `surfacegr`
+(N=1) instead of the closed form. Numerically identical to
+`gsurf4ex(ww + im*Gamma, zeta, delta)`, but costs an eigendecomposition per frequency
+point rather than one sqrt, so it is much slower; it is kept as an independent
+cross-check of the closed-form branch. Argument order matches `gsurf4`, so the two are
+drop-in swaps at the `gsurf4` toggle point.
+"""
+function gsurf4ex_eigen(ww, Gamma, zeta, delta)
+    sg = surfacegr(zeta, delta, Gamma, ww, 1);                     # finite-band 2x2 surface GF
+    sz = ComplexF64[1 0; 0 -1];
+    g0 = zeros(ComplexF64, 4, 4);                                  # block-diagonal in {cup,cdn'}(+){cdn,cup'}
+    g0[[2,3],[2,3]] = sg;                                          # {cdn, cup'} block
+    g0[[1,4],[1,4]] = sz*sg*sz;                                    # {cup, cdn'} block (anomalous sign flipped)
+    return g0;
+end
+
+"""
     gsurf4(ww, Gamma, zeta, delta, Vimp) -> Matrix{ComplexF64}
     gsurf4(ww, Gamma, zeta, delta)       -> Matrix{ComplexF64}
 
@@ -143,20 +162,15 @@ returns the clean g0.
 
 This is the single toggle point for the lead model -- every call site in the module goes
 through it, so switching branches here switches them all:
-  * [`gsurf4ex`](@ref): exact closed-form semi-infinite-chain surface GF;
-  * [`surfacegr`](@ref): finite-band transfer-matrix surface GF -- same result as `gsurf4ex`, 
-    but an eigendecomposition per frequency point instead of one sqrt;
-  * [`gsurf4wb`](@ref): wide-band closed-form approximation (leading order in 1/zeta).
+  * `gsurf4ex`: exact closed-form semi-infinite-chain surface GF;
+  * `gsurf4ex_eigen`: finite-band transfer-matrix surface GF (via `surfacegr`) -- same
+    result as `gsurf4ex`, but an eigendecomposition per frequency point instead of one sqrt;
+  * `gsurf4wb`: wide-band closed-form approximation (leading order in 1/zeta).
 """
 function gsurf4(ww, Gamma, zeta, delta)
     return gsurf4ex(ww + im*Gamma, zeta, delta)             # exact closed form
     ## --- finite-band transfer-matrix version (identical to gsurf4ex, much slower): ---
-    # sg = surfacegr(zeta, delta, Gamma, ww, 1);            # finite-band 2x2 surface GF
-    # sz = ComplexF64[1 0; 0 -1];
-    # g0 = zeros(ComplexF64, 4, 4);                         # block-diagonal in {cup,cdn'}(+){cdn,cup'}
-    # g0[[2,3],[2,3]] = sg;                                 # {cdn, cup'} block
-    # g0[[1,4],[1,4]] = sz*sg*sz;                           # {cup, cdn'} block (anomalous sign flipped)
-    # return g0;
+    # return gsurf4ex_eigen(ww, Gamma, zeta, delta)
     ## --- wide-band approximation (leading order in 1/zeta): ---
     # return gsurf4wb(ww + im*Gamma, zeta, delta, zeros(ComplexF64,4,4))
 end
@@ -171,17 +185,14 @@ end
 
 Closed-form subgap Yu-Shiba-Rusinov (YSR) bound-state energies of a single
 classical-spin impurity `Vimp = impurity4(J, K)` on a BCS lead -- the in-gap
-poles (|E| < delta) of the impurity-dressed surface GF [`gsurf4`](@ref). The
-clean surface GF `g0` is spin-isotropic (singlet pairing), so the result depends
-on the exchange only through its magnitude |J|. With dimensionless couplings
+poles (|E| < delta) of the impurity-dressed surface GF `gsurf4`. With dimensionless couplings
 alpha = |J|/zeta (magnetic), beta = K/zeta (potential) and u = 1 - alpha^2 + beta^2,
 
     E_YSR = +/- delta * |u| / sqrt(u^2 + (2 alpha)^2).
 
 The pair is particle-hole symmetric; the level crosses zero (singlet<->doublet
 parity transition) at  alpha^2 = 1 + beta^2.  `J = K = 0` returns `+/-delta`
-(state pinned at the gap edge -> no subgap bound state). Cross-checked against
-[`ysr_energies_numerical`](@ref) to machine precision. Returns `(-|E_YSR|, +|E_YSR|)`.
+(state pinned at the gap edge -> no subgap bound state).
 """
 function ysr_energies_analytical(J, K, zeta, delta)
     alpha = norm(J) / zeta;                                  # dimensionless magnetic coupling |J|/zeta
@@ -195,40 +206,48 @@ end
     ysr_energies_numerical(J, K, zeta, delta; Ngrid=4001, edge=1e-4) -> (Eminus, Eplus)
 
 Subgap YSR energies obtained by locating the in-gap poles of the impurity-dressed
-surface GF [`gsurf4`](@ref) NUMERICALLY: `gsurf4 = (I - g0 Vimp)^{-1} g0` diverges
+surface GF `gsurf4` numerically: `gsurf4 = (I - g0 Vimp)^{-1} g0` diverges
 exactly where `det(I - g0(E) Vimp) = 0`, which is real for real subgap `E`. The
-clean `g0` is taken from the active [`gsurf4`](@ref) branch; the determinant is scanned on
+clean `g0` is taken from the active `gsurf4` branch; the determinant is scanned on
 `Ngrid` points across `(-delta, delta)` (kept `edge` away from the gap edges) and
 each sign change is refined by bisection. Returns the outermost root pair
 `(-|E_YSR|, +|E_YSR|)`, or `(-delta, delta)` if no subgap pole exists (no bound
-state). Independent cross-check of [`ysr_energies_analytical`](@ref).
+state). Independent cross-check of `ysr_energies_analytical`.
 """
 function ysr_energies_numerical(J, K, zeta, delta; Ngrid = 4001, edge = 1e-4)
     Vimp = impurity4(J, K);
-    g0clean(E) = gsurf4(E, 0.0, zeta, delta);   # clean surface GF g0 from the active gsurf4 branch (Gamma=0: the pole finder scans real subgap E)
-    fdet(E) = real(det(I(4) - g0clean(E)*Vimp));    # Gr denominator: vanishes at the YSR poles
-    
-    Egrid = range(-delta*(1-edge), delta*(1-edge), Ngrid);
-    roots = Float64[];
-
-    fprev = fdet(Egrid[1]); # Gr denominator at first E grid point
-    for k in 2:Ngrid
-        fcur = fdet(Egrid[k]);
-        if fprev == 0.0 # Pole already present at first E grid point
-            push!(roots, Egrid[k-1]);
-        elseif fprev*fcur < 0 # Pole somewhere between E[k-1] and E[k] => bisect until root found
-            a, b, fa = Egrid[k-1], Egrid[k], fprev;
-            for _ in 1:100
-                m = 0.5*(a+b); fm = fdet(m);
-                (fa*fm <= 0) ? (b = m) : (a = m; fa = fm);
-            end
-            push!(roots, 0.5*(a+b));
-        end
-        fprev = fcur;
+    # Gr denominator: vanishes at the YSR poles. Scan runs along subgap E,
+    # with the clean g0 taken from the active gsurf4 branch.
+    function fdet(E)
+        return real(det(I(4) - gsurf4(E, 0.0, zeta, delta)*Vimp));
     end
+    function bisect(a, b)
+    # refine a bracket [a,b] that encloses a sign change.
+        fa = fdet(a);
+        for _ in 1:50
+            m = 0.5*(a+b); fm = fdet(m);
+            if fa*fm <= 0
+                b = m;
+            else
+                a = m; fa = fm;
+            end
+        end
+        return 0.5*(a+b)
+    end
+
+    Egrid = range(-delta*(1-edge), delta*(1-edge), Ngrid);
+    fg = fdet.(Egrid);                                                   # scan the determinant across the gap
+
+    roots = [Egrid[k]  for k in 1:Ngrid  if fg[k] == 0];          # pole sitting exactly on a grid point
+    # Roots not exactly captured above. fg[k]*fg[k+1] < 0 instead of <= 0 to avoid 
+    # double counting the ones captured above.
+    append!(
+        roots,
+        [bisect(Egrid[k], Egrid[k+1]) for k in 1:Ngrid-1 if fg[k]*fg[k+1] < 0]
+    ); # pole bracketed by a sign change
+
     isempty(roots) && return (-delta, delta);                            # no subgap pole -> gap edge
-    sort!(roots);
-    return (roots[1], roots[end]);
+    return extrema(roots)                                                # outermost pair
 end
 
 
@@ -241,20 +260,7 @@ end
 
 Equilibrium (zero-bias) Josephson current at fixed phase difference `phi`, to
 lowest order O(𝒯²), in the 4x4 Nambu(x)spin basis with per-lead classical-spin
-(YSR) impurities `JL,KL` / `JR,KR`. Non-Floquet: the static hopping self-energies
-`Sigrl, Siglr = 𝒯·diag(e^∓iφ/2, -e^±iφ/2)⊗σ0` are time-independent and the current
-is a single frequency integral over `war1` of the Keldysh trace
-`tr[(τz⊗σ0)(Σ gʳ Σ g< + Σ g< Σ gᵃ)]` (LR minus RL). Each lead carries its own
-impurity-dressed surface GF `g_α = (I − g0 V_imp^α)⁻¹ g0`, assigned by the
-alternation rule (propagator just after Σ_LR → R lead, after Σ_RL → L lead).
-Reduces to 2x the 2x2 clean result when `JL=JR=0, KL=KR=0`. Building block of the
-current–phase relation `I(φ)`; `maxᵩ I(φ)` is the critical current.
-
-# Arguments
-- `war1`: real-frequency grid (units of Δ).
-- `zeta`, `delta`, `T`, `Gamma`: lead hopping ζ, gap Δ, transparency 𝒯, Dynes Γ.
-- `phi`: phase difference φ.
-- `JL,KL,JR,KR`: per-lead exchange `J=(Jx,Jy,Jz)` and potential `K` (`J=K=0`: clean).
+(YSR) impurities `JL,KL` / `JR,KR`. 
 """
 function currentPhi_eq_T2(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
     Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]);
@@ -268,18 +274,29 @@ function currentPhi_eq_T2(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
 
     Idcw = zeros(Float64,Nw1);
     Threads.@threads for hi = 1:Nw1
-        z = wwab + im*Gamma; 
-        g0 = gsurf4(wwab, Gamma, zeta, delta);
+        z = war1[hi] + im*Gamma; 
+        g0 = gsurf4(war1[hi], Gamma, zeta, delta);
         gl0 = -(g0 - g0');
-        
+        # The impurity sits on the "lead" site, which is already attached to the local Dynes
+        # bath (Sig_Gamma = -i*Gamma) and, via the hopping, to the semi-infinite reservoir
+        # (Sig_zeta = zeta^2 tz g0 tz). Its dressed retarded GF is therefore the full inverse
+        #     gr = [ w - H0 - Sig_Gamma - Sig_zeta - Vimp ]^-1,
+        # H0 being the properly signed on-site/local (BCS) Hamiltonian. But g0 is exactly the
+        # recursively built surface GF of that same site witout the impurity,
+        #     g0^-1 = w - H0 - Sig_Gamma - Sig_zeta,
+        # so the bracket collapses to g0^-1 - Vimp and
+        #     gr = [ g0^-1 - Vimp ]^-1 = ( I - g0 Vimp )^-1 g0.
+        # Adding the impurity is thus a purely local Dyson dressing of g0 -- the semi-infinite
+        # chain never has to be rebuilt. (Checked against the full inverse to ~2e-14.)
         grL = ( I(4) - g0*VimpL ) \ g0;   # grL^-1 = g0^-1 - VimpL ; surfacegr already carries a local iGamma on every site => NO explicit +iGamma
         grR = ( I(4) - g0*VimpR ) \ g0;
+        ff = (war1[hi] < 0);
         
-        ff = (wwab < 0);
+        # Method 1
         glL = ff .* ( -(grL - grL') );
         glR = ff .* ( -(grR - grR') );
 
-        # # embedded (occupied-state) lesser GF, per lead
+        # Method 2
         # SiglL = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) );
         # SiglR = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) ); 
         # glL = grL*SiglL*gaL;
@@ -294,6 +311,23 @@ function currentPhi_eq_T2(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
     end
     Idc = (deltaw1/(2*pi)) * sum(Idcw);
 
+    ###
+    # Demo: the two equivalent constructions of the per-lead lesser GF
+    glL_fdt = zeros(ComplexF64, Nw1, 4, 4);   # way 1
+    glL_emb = zeros(ComplexF64, Nw1, 4, 4);   # way 2
+    for hi = 1:Nw1
+        wwab = war1[hi];
+        g0   = gsurf4(wwab, Gamma, zeta, delta);
+        gl0  = -(g0 - g0');
+        grL  = ( I(4) - g0*VimpL ) \ g0;
+        gaL  = grL';
+        ff   = (wwab < 0);
+        glL_fdt[hi,:,:] = ff .* ( -(grL - gaL) );
+        glL_emb[hi,:,:] = ff .* ( grL * ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) ) * gaL );
+    end
+    println("max|glL_fdt - glL_emb| = ", maximum(abs.(glL_fdt .- glL_emb)));
+    ###
+
     return Idc
 end
 
@@ -302,10 +336,8 @@ end
 
 Equilibrium Josephson current at fixed phase `phi`, expanded through O(𝒯⁴), in the
 4x4 Nambu(x)spin basis with per-lead YSR impurities: the O(𝒯²) term of
-[`currentPhi_eq_T2`](@ref) plus the four-vertex multiple-tunnelling diagrams
-(chains `Σ gʳ Σ gʳ Σ gʳ Σ g<` etc.). Per-lead impurity-dressed surface GFs with the
-alternation rule (LR chains see lead order R,L,R,L; RL chains L,R,L,R), simple FDT
-lesser GF `g< = -(gʳ-gᵃ)θ(-ω)`. Reduces to 2x the 2x2 clean result when `J=K=0`.
+`currentPhi_eq_T2` plus the four-vertex multiple-tunnelling diagrams
+(chains `Σ gʳ Σ gʳ Σ gʳ Σ g<` etc.).
 """
 function currentPhi_eq_T4(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
     Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]);
@@ -319,18 +351,18 @@ function currentPhi_eq_T4(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
 
     Idcw = zeros(Float64,Nw1);
     Threads.@threads for hi = 1:Nw1
-        z = wwab + im*Gamma; 
-        g0 = gsurf4(wwab, Gamma, zeta, delta);
+        z = war1[hi] + im*Gamma; 
+        g0 = gsurf4(war1[hi], Gamma, zeta, delta);
         gl0 = -(g0 - g0');
-        
         grL = ( I(4) - g0*VimpL ) \ g0;   # grL^-1 = g0^-1 - VimpL ; surfacegr already carries a local iGamma on every site => NO explicit +iGamma
         grR = ( I(4) - g0*VimpR ) \ g0;
-
-        ff = (wwab < 0);
+        ff = (war1[hi] < 0);
+        
+        # Method 1
         glL = ff .* ( -(grL - grL') );
         glR = ff .* ( -(grR - grR') );
 
-        # # embedded (occupied-state) lesser GF, per lead
+        # Method 2
         # SiglL = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) );
         # SiglR = ff .* ( im*2*Gamma*I(4) + zeta^2 .* (tz*gl0*tz) ); 
         # glL = grL*SiglL*gaL;
@@ -361,14 +393,14 @@ end
 """
     currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR) -> Float64
 
-Equilibrium Josephson current at fixed phase `phi`, to ALL orders in the
+Equilibrium Josephson current at fixed phase `phi`, to all orders in the
 transparency (full Dyson resummation, non-perturbative), in the 4x4 Nambu(x)spin
 basis with per-lead YSR impurities. Assembles the 8x8 (two-lead ⊗ Nambu(x)spin)
 junction self-energy `Sigrj` and the per-lead bare propagator
 `grj = diag(g_L, g_R)` with `g_α = (I − g0 V_imp^α)⁻¹ g0`, solves the Dyson
 equation `Grj = (I − grj·Sigrj)⁻¹ grj` and the Keldysh `Glj = Grj·Siglj·Grj†` at
 each frequency, and integrates the current trace `tr[(τz⊗σ0)(Σ_LR G<_RL − Σ_RL
-G<_LR)]`. The exact counterpart of [`currentPhi_eq_T2`](@ref)/`_T4`; reduces to 2x
+G<_LR)]`. The exact counterpart of `currentPhi_eq_T2`/`_T4`; reduces to 2x
 the 2x2 clean result when `J=K=0`. Used by `Josephson_cphir.jl`.
 """
 function currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
@@ -384,16 +416,12 @@ function currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, phi, JL, KL, JR, KR)
 
     Idcw = zeros(Float64,Nw1);
     Threads.@threads for hi = 1:Nw1
-        wwab = war1[hi];
-        
-        z = wwab + im*Gamma; 
-        g0 = gsurf4(wwab, Gamma, zeta, delta);
+        g0 = gsurf4(war1[hi], Gamma, zeta, delta);
         gl0 = -(g0 - g0');
-        
         grL = ( I(4) - g0*VimpL ) \ g0;   # grL^-1 = g0^-1 - VimpL ; surfacegr already carries a local iGamma on every site => NO explicit +iGamma
         grR = ( I(4) - g0*VimpR ) \ g0;
-
-        ff = (wwab < 0);
+        ff = (war1[hi] < 0);
+        
         Siglj = ff .* ( im*2*Gamma*I(8) + [ zeta^2 .* (tz*gl0*tz) zeros(ComplexF64,4,4); zeros(ComplexF64,4,4) zeta^2 .* (tz*gl0*tz) ] );
         grjwar = [grL zeros(ComplexF64,4,4); zeros(ComplexF64,4,4) grR];
         Grjwar = (I(8) - grjwar*Sigrj) \ grjwar;
@@ -413,18 +441,18 @@ end
     currentPhi_eq_Floquet_Tfull(Omega, Nf, dw, zeta, delta, T, Gamma, phi, JL, KL, JR, KR) -> Float64
 
 Equilibrium current-phase relation I(phi) obtained by repurposing the non-equilibrium
-Floquet current machinery ([`current_Floquet_Tfull`](@ref)) at zero voltage. A static
+Floquet current machinery (`current_Floquet_Tfull`) at zero voltage. A static
 phase is a single DC tunnelling harmonic, so set the phase Fourier vector to
 `Vip = e^{-i phi/2} * delta_{m,0}` (only the m=0 slot, index 2Nf+1). Then the hopping
-self-energy [`Vwmnf`](@ref) couples block `(ij,jk)` only for `ij=jk`: the whole
+self-energy `Vwmnf` couples block `(ij,jk)` only for `ij=jk`: the whole
 8(2Nf+1) Floquet-lead problem goes block-diagonal, every Floquet mode decouples, and the
 8x8 (2-lead Nambu(x)spin) block at energy `w+m*Omega` is exactly the static junction of
-[`currentPhi_eq_Tfull`](@ref). The reduced-zone integral over [-Omega/2, Omega/2] summed
+`currentPhi_eq_Tfull`. The reduced-zone integral over [-Omega/2, Omega/2] summed
 over the 2Nf+1 diagonal current blocks (`sum(diag(Iif))`) re-tiles the full frequency
-axis, so `Omega` (grid spacing) and `Nf` (mode count) are pure DISCRETISATION knobs:
-choose `(Nf+1/2)*Omega >~ zeta` to cover the band and `dw <~ Gamma/5` to resolve the YSR
-peaks. The G< embedding (bath 2iGamma + surface `zeta^2 tau_z g<0 tau_z`, [`Siglf`](@ref))
-is inherited verbatim from the V-bias solver, so this reproduces [`currentPhi_eq_Tfull`](@ref)
+axis, so `Omega` (grid spacing) and `Nf` (mode count) are pure discretization knobs:
+choose `(Nf+1/2)*Omega >~ zeta` to cover the band. 
+The G< embedding (bath 2iGamma + surface `zeta^2 tau_z g<0 tau_z`, `Siglf`)
+is inherited verbatim from the V-bias solver, so this reproduces `currentPhi_eq_Tfull`
 to grid accuracy (same wide-band g0, same embedding, same current). Scan phi and take
 `I_c^+ = max_phi I`, `I_c^- = -min_phi I`.
 """
@@ -445,13 +473,11 @@ end
 ## ============ V bias perturbative with explicit energy exchanges (MPT: non-renormalised jumps) ============
 
 
-
-
 """
     current_Vbias_Floquet_Tfull(war1, ev, zeta, delta, T, Gamma, JL, KL, JR, KR) -> Float64
 
 Normal-state (Delta=0) Ohmic reference current via the full 4x4 Floquet machinery
-([`current_Floquet_Tfull`](@ref)) with a single DC phase harmonic. Per-lead impurity
+(`current_Floquet_Tfull`) with a single DC phase harmonic. Per-lead impurity
 JL,KL,JR,KR threaded through.
 """
 function current_Vbias_Floquet_Tfull(war1, ev, zeta, delta, T, Gamma, JL, KL, JR, KR)
@@ -527,7 +553,7 @@ end
 """
     current_Vbias_MPT_T2_qp(war1, Omega, zeta, delta, T, Gamma, War, JL, KL, JR, KR) -> Float64
 
-Quasiparticle channel of [`current_Vbias_MPT_T2`](@ref): keeps only the NORMAL
+Quasiparticle channel of `current_Vbias_MPT_T2`: keeps only the NORMAL
 (e-e, h-h) blocks of each dressed lead GF (anomalous e-h blocks zeroed). 4x4 per-lead.
 """
 function current_Vbias_MPT_T2_qp(war1, Omega, zeta, delta, T, Gamma, War, JL, KL, JR, KR)
@@ -572,7 +598,7 @@ end
 """
     current_Vbias_MPT_T2_pair(war1, Omega, zeta, delta, T, Gamma, War, JL, KL, JR, KR) -> Float64
 
-Pair channel of [`current_Vbias_MPT_T2`](@ref): keeps only the ANOMALOUS (e-h, h-e)
+Pair channel of `current_Vbias_MPT_T2`: keeps only the ANOMALOUS (e-h, h-e)
 blocks of each dressed lead GF and, as in the 2x2 original, uses BOTH the +eV and -eV
 phase harmonics War[2+1]/War[2-1] in the vertices to isolate the DC pair current.
 4x4 per-lead.
@@ -676,7 +702,7 @@ end
 """
     current_Vbias_MPT_T4_qp(war1, Omega, zeta, delta, T, Gamma, War, JL, KL, JR, KR) -> Float64
 
-Quasiparticle channel of [`current_Vbias_MPT_T4`](@ref): NORMAL (e-e, h-h) blocks of
+Quasiparticle channel of `current_Vbias_MPT_T4`: NORMAL (e-e, h-h) blocks of
 each dressed lead GF only. 4x4 per-lead.
 """
 function current_Vbias_MPT_T4_qp(war1, Omega, zeta, delta, T, Gamma, War, JL, KL, JR, KR)
@@ -789,7 +815,7 @@ end
 """
     current_Vbias_MPT_T4_qp_aobo(war1, Omega, zeta, delta, T, Gamma, ao, bo, War, JL, KL, JR, KR) -> Float64
 
-Quasiparticle (NORMAL e-e/h-h GF only) part of [`current_Vbias_MPT_T4_aobo`](@ref). 4x4 per-lead.
+Quasiparticle (Normal e-e/h-h GF only) part of `current_Vbias_MPT_T4_aobo`. 4x4 per-lead.
 """
 function current_Vbias_MPT_T4_qp_aobo(war1, Omega, zeta, delta, T, Gamma, ao, bo, War, JL, KL, JR, KR)
     Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]);
@@ -847,7 +873,7 @@ end
 """
     current_Vbias_MPT_T4_pair_aobo(war1, Omega, zeta, delta, T, Gamma, ao, bo, War, JL, KL, JR, KR) -> Float64
 
-Pair (ANOMALOUS e-h/h-e GF only) part of [`current_Vbias_MPT_T4_aobo`](@ref). 4x4 per-lead.
+Pair (Anomalous e-h/h-e GF only) part of `current_Vbias_MPT_T4_aobo`. 4x4 per-lead.
 """
 function current_Vbias_MPT_T4_pair_aobo(war1, Omega, zeta, delta, T, Gamma, ao, bo, War, JL, KL, JR, KR)
     Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]);
@@ -967,7 +993,7 @@ end
 """
     current_Vbias_MPT_T6_pair(war1, Omega, zeta, delta, T, Gamma, War, JL, KL, JR, KR) -> Float64
 
-Pair (ANOMALOUS e-h/h-e GF only) channel of [`current_Vbias_MPT_T6`](@ref). 4x4 per-lead.
+Pair (Anomalous e-h/h-e GF only) channel of `current_Vbias_MPT_T6`. 4x4 per-lead.
 """
 function current_Vbias_MPT_T6_pair(war1, Omega, zeta, delta, T, Gamma, War, JL, KL, JR, KR)
     Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]);
@@ -1025,7 +1051,7 @@ end
 """
     current_Vbias_MPT_T6_qp(war1, Omega, zeta, delta, T, Gamma, War, JL, KL, JR, KR) -> Float64
 
-Quasiparticle (NORMAL e-e/h-h GF only) channel of [`current_Vbias_MPT_T6`](@ref). 4x4 per-lead.
+Quasiparticle (Normal e-e/h-h GF only) channel of `current_Vbias_MPT_T6`. 4x4 per-lead.
 """
 function current_Vbias_MPT_T6_qp(war1, Omega, zeta, delta, T, Gamma, War, JL, KL, JR, KR)
     Nw1 = length(war1); deltaw1 = abs(war1[2]-war1[1]);
@@ -1087,13 +1113,13 @@ end
 """
     surfacegr(zeta, delta, Gamma, ww, N) -> Matrix{ComplexF64}
 
-Surface (edge) RETARDED Green's function of a semi-infinite 1D BCS lead at energy
+Surface (edge) retarded Green's function of a semi-infinite 1D BCS lead at energy
 `ww`, built by the transfer-matrix / eigendecomposition method of
 Phys. Rev. B 83, 085412 (2011) (Eqs. 19–26): the decaying eigenvectors of the
 transfer matrix select the surface GF. `N` = sites per unit cell (N=1 for a simple
 chain), `zeta` hopping ζ, `delta` gap Δ, `Gamma` broadening Γ. Returns the 2N×2N
 Nambu surface GF; for N=1 it coincides with the analytic BCS form used by
-[`grwmnf`](@ref).
+`grwmnf`.
 """
 function surfacegr(zeta, delta, Gamma, ww, N)
     "
@@ -1121,11 +1147,11 @@ end
 """
     grwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR) -> Matrix{ComplexF64}
 
-Bare RETARDED lead Green's function in the Floquet x (Nambu(x)spin) x lead basis,
+Bare retarded lead Green's function in the Floquet x (Nambu(x)spin) x lead basis,
 4x4 per (lead, Floquet) block in the basis (cup, cdn, cup', cdn'). Block-diagonal in
 the Floquet index m in [-Nf,Nf]; each 4x4 block is the impurity-dressed BCS surface
-GF at the shifted energy w+m*Omega (see [`gsurf4`](@ref), [`impurity4`](@ref)). The
-two leads are built SEPARATELY so they may carry different classical spins: left lead
+GF at the shifted energy w+m*Omega (see `gsurf4`, `impurity4`). The
+two leads are built separately so they may carry different classical spins: left lead
 uses exchange `JL=(Jx,Jy,Jz)` and potential `KL`, right lead `JR,KR`. With
 JL=JR=0, KL=KR=0 each block reduces to (two spin copies of) the original 2x2 result.
 Returns an 8(2Nf+1) x 8(2Nf+1) matrix (lead outer, Floquet middle, Nambu(x)spin inner).
@@ -1150,12 +1176,12 @@ end
 """
     grwmnf_sp(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR) -> SparseMatrixCSC{ComplexF64,Int}
 
-Sparse counterpart of [`grwmnf`](@ref). The bare (impurity-dressed) surface GF is
+Sparse counterpart of `grwmnf`. The bare (impurity-dressed) surface GF is
 block-diagonal -- one 4x4 Nambu(x)spin block per Floquet mode, with the two leads
 decoupled -- so it is built directly as a sparse block-diagonal matrix
 `blkdiag(grwmn_dL, grwmn_dR)` instead of allocating the dense 8(2Nf+1)-square array
 (and its two 4(2Nf+1)-square lead halves). Numerically identical to `grwmnf`; the
-sparsity is what lets the Dyson solve in [`Grwmnf`](@ref) skip the dense factorization
+sparsity is what lets the Dyson solve in `Grwmnf` skip the dense factorization
 once the hopping self-energy is also sparse.
 """
 function grwmnf_sp(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
@@ -1178,7 +1204,7 @@ end
 """
     gawmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR) -> Matrix{ComplexF64}
 
-Bare ADVANCED lead Green's function, the -iGamma counterpart of [`grwmnf`](@ref)
+Bare advanced lead Green's function, the -iGamma counterpart of `grwmnf`
 (4x4 Nambu(x)spin, per-lead impurity dressing). Equivalent to `grwmnf(...)'`; in the
 hot loops the code uses the dagger of the retarded GF instead.
 """
@@ -1202,10 +1228,10 @@ end
 """
     glwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR) -> Matrix{ComplexF64}
 
-Bare LESSER lead Green's function in the 4x4 Nambu(x)spin Floquet basis:
+Bare lesser lead Green's function in the 4x4 Nambu(x)spin Floquet basis:
 `g< = -(g^r - g^a)` restricted to occupied energies (w+m*Omega < 0, T=0),
 block-diagonal in the Floquet index and in the lead. Built from the dressed retarded
-GF [`grwmnf`](@ref) (g^a = g^r'), so the equilibrium filling of any YSR bound state
+GF `grwmnf` (g^a = g^r'), so the equilibrium filling of any YSR bound state
 is included automatically.
 """
 function glwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR)
@@ -1228,9 +1254,9 @@ end
 """
     Grwmnf(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR) -> Matrix{ComplexF64}
 
-Full (dressed) RETARDED GF from the Floquet Dyson equation `Gr = (I - gr Sigr)^{-1} gr`,
-with `gr` = [`grwmnf`](@ref) (4x4 Nambu(x)spin, per-lead impurity JL,KL,JR,KR) and
-`Sigr` = [`Vwmnf`](@ref)`(Vip)`. Solved as a linear system of size 8(2Nf+1).
+Full (dressed) retarded GF from the Floquet Dyson equation `Gr = (I - gr Sigr)^{-1} gr`,
+with `gr` = `grwmnf` (4x4 Nambu(x)spin, per-lead impurity JL,KL,JR,KR) and
+`Sigr` = `Vwmnf``(Vip)`. Solved as a linear system of size 8(2Nf+1).
 """
 function Grwmnf(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR)
     # grwmn = Keldyshsetup_Floquetn_ext.grwmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
@@ -1247,8 +1273,8 @@ end
 """
     Gawmnf(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR) -> Matrix{ComplexF64}
 
-Full (dressed) ADVANCED GF `Ga = (I - ga Siga)^{-1} ga`, advanced counterpart of
-[`Grwmnf`](@ref) (4x4). In practice the code uses `Grwmn'`, so this is currently unused.
+Full (dressed) advanced GF `Ga = (I - ga Siga)^{-1} ga`, advanced counterpart of
+`Grwmnf` (4x4). In practice the code uses `Grwmn'`, so this is currently unused.
 """
 function Gawmnf(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR)
     gawmn = Keldyshsetup_Floquetn_ext.gawmnf(ww, Omega, Nf, zeta, delta, Gamma, JL, KL, JR, KR);
@@ -1263,7 +1289,7 @@ end
 
 Lesser self-energy Sig< in the 4x4 Nambu(x)spin Floquet-lead basis: semi-infinite-lead
 embedding via the surface term `zeta^2 (tauz(x)sig0) g< (tauz(x)sig0)` (method 1), with
-the bare reservoir `g<` (J=K=0) from [`glwmnf`](@ref). The internal flag `Sigl_s` selecting the embedding scheme is
+the bare reservoir `g<` (J=K=0) from `glwmnf`. The internal flag `Sigl_s` selecting the embedding scheme is
 hardcoded to `1` (formerly a function argument); `Sigl_s == 2` (alternative embedding)
 is not ported to the 4x4 basis.
 """
@@ -1304,8 +1330,8 @@ end
     Glesser_Floquet_Tfull(ww, Omega, Nf, zeta, delta, T, Gamma, Vip,
                           JL, KL, JR, KR, Grwmn=nothing, Gawmn=nothing, Sigl=nothing) -> Matrix{ComplexF64}
 
-Full (all-orders in T) LESSER GF via the Keldysh equation `G< = Gr Sig< Ga`, with `Gr`
-from [`Grwmnf`](@ref) and `Sig<` from [`Siglf`](@ref) (4x4 Nambu(x)spin, per-lead
+Full (all-orders in T) lesser GF via the Keldysh equation `G< = Gr Sig< Ga`, with `Gr`
+from `Grwmnf` and `Sig<` from `Siglf` (4x4 Nambu(x)spin, per-lead
 impurity JL,KL,JR,KR). Optional `Grwmn, Gawmn, Sigl` allow passing precomputed pieces.
 """
 function Glesser_Floquet_Tfull(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, Grwmn = nothing, Gawmn = nothing, Sigl = nothing)
@@ -1324,9 +1350,9 @@ end
     Glesser_Floquet_T2(ww, Omega, Nf, zeta, delta, T, Gamma, Vip,
                        grwmn=nothing, gawmn=nothing, glwmn=nothing) -> Matrix{ComplexF64}
 
-LESSER Green's function truncated at O(𝒯²) in the transparency (Werthamer-type
-tunnelling expansion): `G< ≈ gʳ V g< + g< V gᵃ`, with `V`=[`Vwmnf`](@ref)`(Vip)` and
-bare propagators from [`grwmnf`](@ref)/[`glwmnf`](@ref). Optional bare GFs may be
+Lesser Green's function truncated at O(𝒯²) in the transparency (Werthamer-type
+tunnelling expansion): `G< ≈ gʳ V g< + g< V gᵃ`, with `V`=`Vwmnf``(Vip)` and
+bare propagators from `grwmnf`/`glwmnf`. Optional bare GFs may be
 passed in. Selected by the `ws=2` scheme.
 """
 function Glesser_Floquet_T2(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn = nothing, gawmn = nothing, glwmn = nothing)
@@ -1348,8 +1374,8 @@ end
     Glesser_Floquet_T4(ww, Omega, Nf, zeta, delta, T, Gamma, Vip,
                        grwmn=nothing, gawmn=nothing, glwmn=nothing) -> Matrix{ComplexF64}
 
-LESSER Green's function of the transparency expansion kept through O(𝒯⁴) (the O(𝒯²)
-term of [`Glesser_Floquet_T2`](@ref) plus the next chain order). Scheme `ws=4`.
+Lesser Green's function of the transparency expansion kept through O(𝒯⁴) (the O(𝒯²)
+term of `Glesser_Floquet_T2` plus the next chain order). Scheme `ws=4`.
 """
 function Glesser_Floquet_T4(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn = nothing, gawmn = nothing, glwmn = nothing)
     if isnothing(grwmn)
@@ -1373,7 +1399,7 @@ end
     Glesser_Floquet_T6(ww, Omega, Nf, zeta, delta, T, Gamma, Vip,
                        grwmn=nothing, gawmn=nothing, glwmn=nothing) -> Matrix{ComplexF64}
 
-LESSER Green's function of the transparency expansion kept through O(𝒯⁶). Scheme `ws=6`.
+Lesser Green's function of the transparency expansion kept through O(𝒯⁶). Scheme `ws=6`.
 """
 function Glesser_Floquet_T6(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn = nothing, gawmn = nothing, glwmn = nothing)
     if isnothing(grwmn)
@@ -1398,7 +1424,7 @@ end
     Glesser_Floquet_T8(ww, Omega, Nf, zeta, delta, T, Gamma, Vip,
                        grwmn=nothing, gawmn=nothing, glwmn=nothing) -> Matrix{ComplexF64}
 
-LESSER Green's function of the transparency expansion kept through O(𝒯⁸). Scheme `ws=8`.
+Lesser Green's function of the transparency expansion kept through O(𝒯⁸). Scheme `ws=8`.
 """
 function Glesser_Floquet_T8(ww, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, grwmn = nothing, gawmn = nothing, glwmn = nothing)
     if isnothing(grwmn)
@@ -1425,8 +1451,8 @@ end
                           JL, KL, JR, KR, iterprint) -> Matrix{ComplexF64}
 
 Floquet-mode-resolved current for phase solution `Vip`, exact in T (4x4 Nambu(x)spin).
-At each energy in `war0` it forms `G<` via [`Glesser_Floquet_Tfull`](@ref) and the
-current matrix `-Vi G<` (Vi = [`Viwmnf`](@ref)), takes the Nambu(x)spin trace (4 diag
+At each energy in `war0` it forms `G<` via `Glesser_Floquet_Tfull` and the
+current matrix `-Vi G<` (Vi = `Viwmnf`), takes the Nambu(x)spin trace (4 diag
 elements) per Floquet pair (m,n) as lead-L minus lead-R, and integrates over the
 one-period grid. Returns `Iif[m,n]`: diagonal sum = DC current, off-diagonals = AC.
 """
@@ -1440,7 +1466,7 @@ function current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, 
     Threads.@threads for ij = 1:Nw0
         Glwmn = Keldyshsetup_Floquetn_ext.Glesser_Floquet_Tfull(war0[ij], Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR)
         Itemp0 = -Vvi*Glwmn;
-        Threads.@threads for jk = 1:2*Nf+1
+        for jk = 1:2*Nf+1
             for kl = 1:2*Nf+1
                 # Nambu(x)spin trace (4 diagonal components) of Floquet pair (jk,kl): lead L minus lead R
                 LL = Itemp0[4*jk-3,4*kl-3] + Itemp0[4*jk-2,4*kl-2] + Itemp0[4*jk-1,4*kl-1] + Itemp0[4*jk,4*kl];
@@ -1464,7 +1490,7 @@ end
     current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint) -> Matrix{ComplexF64}
 
 Floquet-mode-resolved current for phase solution `Vip`, truncated at O(𝒯²): like
-[`current_Floquet_Tfull`](@ref) but with `G<` from [`Glesser_Floquet_T2`](@ref).
+`current_Floquet_Tfull` but with `G<` from `Glesser_Floquet_T2`.
 """
 function current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint)
     Nw0 = length(war0); deltaw0 = abs(war0[2]-war0[1]);
@@ -1499,7 +1525,7 @@ end
 """
     current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint) -> Matrix{ComplexF64}
 
-Floquet-mode-resolved current truncated at O(𝒯⁴) (uses [`Glesser_Floquet_T4`](@ref)).
+Floquet-mode-resolved current truncated at O(𝒯⁴) (uses `Glesser_Floquet_T4`).
 """
 function current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, Vip, JL, KL, JR, KR, iterprint)
     Nw0 = length(war0); deltaw0 = abs(war0[2]-war0[1]);
@@ -1560,13 +1586,13 @@ end
 """
     Vwmnf_sp(Vip, Nf, T) -> SparseMatrixCSC{ComplexF64,Int}
 
-Sparse counterpart of [`Vwmnf`](@ref). The hopping self-energy is off-diagonal in lead
+Sparse counterpart of `Vwmnf`. The hopping self-energy is off-diagonal in lead
 (`[0 Vwmn_d; Vwmn_d1 0]`), banded in Floquet (block `(ij,jk)` carries only the harmonics
 `Vip[±(ij-jk)]`, nonzero for odd `ij-jk` within the support of `Vip`), and each 4x4
 Nambu(x)spin block is diagonal (`kron(diag,sig0)`). So it is assembled directly from
 its (few) nonzero diagonal entries instead of the dense 8(2Nf+1)-square array, keeping
 allocations much smaller. Numerically identical to `Vwmnf`; keeping it sparse lets the Dyson LHS
-`I - grwmn*Sigr` in [`Grwmnf`](@ref) stay sparse for a banded (rather than dense) solve.
+`I - grwmn*Sigr` in `Grwmnf` stay sparse for a banded (rather than dense) solve.
 """
 function Vwmnf_sp(Vip, Nf, T)
     Is = Int[]; Js = Int[]; Vs = ComplexF64[];
@@ -1593,7 +1619,7 @@ end
 """
     Viwmnf(Vip, Nf, T) -> Matrix{ComplexF64}
 
-Current-vertex variant of [`Vwmnf`](@ref): same hopping but with the hole-Nambu sign
+Current-vertex variant of `Vwmnf`: same hopping but with the hole-Nambu sign
 unflipped, i.e. `tau_z(x)sig0` folded in (`Viwmnf = (tau_z(x)sig0) Vwmnf`), as needed
 by the current operator `I = tr[(tau_z(x)sig0)(.)]`. Used to form `-Viwmnf G<`.
 """
@@ -1619,10 +1645,10 @@ end
 
 Residual F(x) of the current-bias self-consistency, exact in T (4x4 Nambu(x)spin,
 per-lead impurity JL,KL,JR,KR). The unknown real vector `Vipi` (length 4Nf) packs the
-real and imag parts of the 2Nf odd phase harmonics W_m -- UNCHANGED by the spin
+real and imag parts of the 2Nf odd phase harmonics W_m, unchanged by the spin
 extension. Returns the 4Nf real equations: (1) unitarity of exp(-i phi/2); (2) gauge
 phi(0)=0; (3) vanishing of every AC current harmonic I_{2h}=0, with the current from
-[`current_Floquet_Tfull`](@ref).
+`current_Floquet_Tfull`.
 """
 function IbiasResidual_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint)
     Vip = zeros(ComplexF64, 4*Nf+1);
@@ -1659,7 +1685,7 @@ function IbiasResidual_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, K
     # precursor: at finite Nf it is NOT conjugate-symmetric, A_{-s} != conj(A_s), so the
     # reconstructed I(t) is complex and nulling A_{+2h} alone leaves A_{-2h} finite. The
     # physical harmonic is the real part, I_s = (A_s + conj(A_{-s}))/2, which satisfies
-    # I_{-s} = conj(I_s) identically at any Nf. Derivation: docs/current_reality/.
+    # I_{-s} = conj(I_s) identically at any Nf.
     Threads.@threads for hi = 1:Nf
         sm = -2*hi+(2*Nf+1); sp = 2*hi+(2*Nf+1);            # slots of A_{+2h} and A_{-2h}
         eqns[(2*Nf)+hi]    = 0.5*( real(Ifa[sm]) + real(Ifa[sp]) );
@@ -1676,8 +1702,8 @@ end
     IbiasResidual_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint) -> Vector{Float64}
 
 Current-bias residual `F(x)` with the current rows evaluated at O(𝒯²) (via
-[`current_Floquet_T2`](@ref)); the unitarity and gauge rows are identical to
-[`IbiasResidual_Tfull`](@ref). Used by [`phisolve`](@ref) for `ws=2`.
+`current_Floquet_T2`); the unitarity and gauge rows are identical to
+`IbiasResidual_Tfull`. Used by `phisolve` for `ws=2`.
 """
 function IbiasResidual_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint)
     Vip = zeros(ComplexF64, 4*Nf+1);
@@ -1711,7 +1737,7 @@ function IbiasResidual_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, 
         end
     end
     # Reality-symmetrised bias condition, as in IbiasResidual_Tfull: the physical harmonic
-    # is I_s = (A_s + conj(A_{-s}))/2, not the one-sided A_s. See docs/current_reality/.
+    # is I_s = (A_s + conj(A_{-s}))/2, not the one-sided A_s. 
     # (odd harmonics are 0 anyway, improving with the number of Floquet modes.)
     Threads.@threads for hi = 1:Nf
         sm = -2*hi+(2*Nf+1); sp = 2*hi+(2*Nf+1);            # slots of A_{+2h} and A_{-2h}
@@ -1728,8 +1754,8 @@ end
 """
     IbiasResidual_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint) -> Vector{Float64}
 
-Current-bias residual with current rows at O(𝒯⁴) ([`current_Floquet_T4`](@ref));
-constraint rows as in [`IbiasResidual_Tfull`](@ref). Used by [`phisolve`](@ref) for `ws=4`.
+Current-bias residual with current rows at O(𝒯⁴) (`current_Floquet_T4`);
+constraint rows as in `IbiasResidual_Tfull`. Used by `phisolve` for `ws=4`.
 """
 function IbiasResidual_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint)
     Vip = zeros(ComplexF64, 4*Nf+1);
@@ -1763,7 +1789,7 @@ function IbiasResidual_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, 
         end
     end
     # Reality-symmetrised bias condition, as in IbiasResidual_Tfull: the physical harmonic
-    # is I_s = (A_s + conj(A_{-s}))/2, not the one-sided A_s. See docs/current_reality/.
+    # is I_s = (A_s + conj(A_{-s}))/2, not the one-sided A_s.
     # (odd harmonics are 0 anyway, improving with the number of Floquet modes.)
     Threads.@threads for hi = 1:Nf
         sm = -2*hi+(2*Nf+1); sp = 2*hi+(2*Nf+1);            # slots of A_{+2h} and A_{-2h}
@@ -1784,7 +1810,7 @@ end
     IbiasJacobian_Tfull(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma,
                         JL, KL, JR, KR, iterprint) -> Matrix
 
-Analytic Jacobian J_{ij}=dF_i/dx_j of [`IbiasResidual_Tfull`](@ref) (4Nf x 4Nf),
+Analytic Jacobian J_{ij}=dF_i/dx_j of `IbiasResidual_Tfull` (4Nf x 4Nf),
 4x4 Nambu(x)spin with per-lead impurity JL,KL,JR,KR. Unitarity/gauge rows are closed
 form (unchanged by the spin extension). Current rows use
 `dG</dx_j = Gr M_j G< + G< M_j Ga` (valid since Sig< is x-independent and V linear in
@@ -1994,9 +2020,9 @@ end
 """
     IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint) -> Matrix{Float64}
 
-Analytic Jacobian of [`IbiasResidual_T2`](@ref): same construction as
-[`IbiasJacobian_Tfull`](@ref) but with the current-row derivatives built from the
-bare propagators / O(𝒯²)-truncated `G<`. Used by [`phisolve`](@ref) for `ws=2`.
+Analytic Jacobian of `IbiasResidual_T2`: same construction as
+`IbiasJacobian_Tfull` but with the current-row derivatives built from the
+bare propagators / O(𝒯²)-truncated `G<`. Used by `phisolve` for `ws=2`.
 """
 function IbiasJacobian_T2(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint)
     # --- Unpack the real unknown vector into complex phase Fourier coefficients ---
@@ -2166,8 +2192,8 @@ end
 """
     IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint) -> Matrix{Float64}
 
-Analytic Jacobian of [`IbiasResidual_T4`](@ref) (current-row derivatives at O(𝒯⁴)).
-Used by [`phisolve`](@ref) for `ws=4`.
+Analytic Jacobian of `IbiasResidual_T4` (current-row derivatives at O(𝒯⁴)).
+Used by `phisolve` for `ws=4`.
 """
 function IbiasJacobian_T4(Vipi, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, iterprint)
     # --- Unpack the real unknown vector into complex phase Fourier coefficients ---
@@ -2470,39 +2496,27 @@ end
     phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma,
              JL, KL, JR, KR) -> (Iv, Vipsol, residualarr)
 
-Main current-bias driver for the 4x4 Nambu(x)spin (YSR) module. For each bias eV in
-`evar` (swept high->low with continuation), solves the self-consistency F(x)=0 with
-`NLsolve.nlsolve` (:trust_region) using the analytic [`IbiasJacobian_Tfull`](@ref).
-Per-lead classical-spin impurities are `JL,KL` (left) and `JR,KR` (right). Only the
-exact-Dyson scheme `ws=0` is supported; perturbative schemes are not yet ported.
+Main current-bias driver for the 4x4 Nambu(x)spin (YSR) module. Sweeps `evar` high->low,
+solving F(x)=0 at each bias with `NLsolve.nlsolve` (:trust_region) and the analytic
+`IbiasJacobian_Tfull`, continuing from the previous converged solution (zero-padded by
+`embed_seed`; the largest-|V| point uses the trivial seed). Per-lead impurities `JL,KL` /
+`JR,KR`; only `ws=0` (exact Dyson) is supported.
 
-Seeding: the largest-|V| point uses the trivial seed and every lower point continues from the
-previous converged solution, zero-padded into the current Floquet window via [`embed_seed`](@ref).
+Keywords, any order: `ftols` (1e-16), `xtols` (1e-13), `itermax` (60) set the nlsolve exit
+criteria; `tol_accept` (1e-12) is the residual counting as converged; `Nf_start` (20) and
+`edge_tol` (1e-3) drive the adaptive support, with the positional `Nf` as its ceiling.
 
-Keyword arguments `ftols` (1e-16), `xtols` (1e-13), `itermax` (60) override the nlsolve exit
-criteria; `tol_accept` (1e-12) is the residual below which a point counts as converged. Adaptive
-Floquet support is controlled by `Nf_start` (20, the support at the largest |V|) and `edge_tol`
-(1e-3); the positional `Nf` is the ceiling (maximum support). Keywords can be given in any order.
+`scale_current` (default `false`) multiplies the current-nulling rows `2Nf+1:4Nf` of `F` and
+its Jacobian by `RN`, lifting them from `Ic ~ Delta/RN` to O(Delta) like the unitarity/gauge
+rows. Row scaling is exact-Newton invariant so the root is unchanged, but it reweights the
+trust-region merit and hence the search path -- which may help or hurt at hard points, so it
+is opt-in. When on, `residualarr` and the `ftol`/`tol_accept` tests are in the scaled metric.
 
-Row equilibration (`scale_current`, default `false`): when enabled, the current-nulling rows
-`2Nf+1:4Nf` of both `F` and its Jacobian are multiplied by `RN` (from [`RN_full`](@ref)) so
-they become O(Delta) like the unitarity/gauge rows (raw scale `Ic ~ Delta/RN`). This leaves
-the root unchanged (row scaling is exact-Newton invariant), so it cannot create a missing
-root. It does change the `:trust_region` path, though: the dogleg merit `||D f||^2` has
-gradient `J'D^2 f` skewed by the `RN^2` weighting, so trial steps are rejected and the
-Jacobian is recomputed several times per accepted iteration. That path change may help or 
-hurt reaching an existing root at hard points and kept as an opt-in. With it on, `residualarr` 
-and the `ftol`/`tol_accept` tests are in the scaled metric.
-
-Adaptive Floquet support (ws=0): the phase spectrum widens as |V| falls, so the number of Floquet
-harmonics needed grows toward low bias. Each point begins at the previous converged support
-(non-decreasing down the sweep, starting from `Nf_start`) and `Nf` is increased in steps of 2 --
-re-seeding by zero-padding the previous solution ([`embed_seed`](@ref)) -- whenever the solve misses
-`tol_accept` or the converged spectrum still carries weight at the cutoff ([`edgepeak`](@ref) >
-`edge_tol`, i.e. the window is too narrow), up to the ceiling `Nf`. Once no more support can be given
--- the ceiling is reached -- the trust-region iterate is accepted as it stands, whether or not it met 
-`tol_accept`/`edge_tol`; the per-point log reports the residual and edge/peak of any such point so it 
-stays visible. Solutions are returned zero-padded to the ceiling width.
+Adaptive Floquet support: the phase spectrum widens as |V| falls, so the support starts at the
+previous converged value (non-decreasing, from `Nf_start`) and grows in steps of 2, re-seeding
+each time, whenever the solve misses `tol_accept` or still carries weight at the cutoff
+(`edgepeak` > `edge_tol`). At the ceiling the iterate is accepted as-is, converged or not, with
+its residual and edge/peak logged. Returned solutions are zero-padded to the ceiling width.
 
 # Returns
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
@@ -2522,10 +2536,8 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
     #--Current-row equilibration (opt-in via scale_current). RN row-scales the current-nulling rows
     # 2Nf+1:4Nf (natural scale Ic~Delta/RN) up to O(Delta) like the unitarity/gauge rows; it leaves the
     # root unchanged (row scaling is exact-Newton invariant) but changes the trust-region path. RN is
-    # ~Nf-independent (normal-state), so it is computed once at the ceiling; `rowscale` is rebuilt at the
-    # trial support inside the loop.
+    # ~Nf-independent (normal-state), so it is computed once at the ceiling.
     RN = scale_current ? Keldyshsetup_Floquetn_ext.RN_full(Nfmax, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR) : 1.0;
-    scale_current && println("-- current-row equilibration ON: RN = $RN")
 
     # Floquet support: the Floquet spectrum/support widens as |V| falls, so we must increase Nf at
     # low bias. Start at Nf_start (largest |V|), for each lower-|V| point begin at the previous converged
@@ -2611,7 +2623,7 @@ end
     RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR) -> Float64
 
 Normal-state resistance `R_N`: Ohmic DC current with the gap set to zero (delta1=0) at
-a small reference voltage via [`current_Floquet_Tfull`](@ref), then `R_N = V/I`. Pass
+a small reference voltage via `current_Floquet_Tfull`, then `R_N = V/I`. Pass
 JL=JR=0, KL=KR=0 for the clean Ohmic reference, or the actual impurity to normalise by
 the same junction's normal-state resistance.
 """

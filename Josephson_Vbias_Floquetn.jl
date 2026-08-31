@@ -19,8 +19,9 @@ mu = 0; delta = 1; zeta = 20; T = 0.99*zeta; Gamma = 0.02;
 dw0 = minimum([Gamma/5, 0.01]);
 
 #voltage
+signed_evar = false;
 Nev = 30; evar = delta*range(0.05, 2, Nev);
-# Nev1 = 30; evar1 = delta*range(0.05, 2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+# signed_evar = true; Nev1 = 30; evar1 = delta*range(0.05, 2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 
 #Lesser self energy
 
@@ -81,11 +82,18 @@ for hi = 1:Nev
     Iwj[hi] = Ifa[hi,-2+(2*Nf+1)];
 end
 
-dIdv = zeros(Float64, Nev); 
-for hi = 1:Nev-1
-    dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
+# Centred differences, taken branch by branch
+dVg = evar[2]-evar[1];
+Nbr = signed_evar ? (1:count(<(0), evar), count(<(0), evar)+1:Nev) : (1:Nev,);
+dIdv = zeros(Float64, Nev);
+for br in Nbr
+    a, b = first(br), last(br);
+    for hi = a+1:b-1
+        dIdv[hi] = (Iv[hi+1]-Iv[hi-1]) / (evar[hi+1]-evar[hi-1]);
+    end
+    dIdv[a] = (-3*Iv[a] + 4*Iv[a+1] - Iv[a+2]) / (2*dVg);   # one-sided, 2nd order
+    dIdv[b] = ( 3*Iv[b] - 4*Iv[b-1] + Iv[b-2]) / (2*dVg);
 end
-dIdv[Nev] = dIdv[Nev-1] + (dIdv[Nev-1]-dIdv[Nev-2])
 
 
 ## ------------RN--------------
@@ -93,33 +101,19 @@ RN = Keldyshsetup_Floquetn.RN_full(Nf, dw0, zeta, delta, T, Gamma);
 
 
 ## ----------Plots----------
+thr_MAR = [2/n for n in 1:6];
 
 evmin = 1;
-p2 = plot(evar[evmin:Nev]/delta, Iv[evmin:Nev] * RN, lc=:blue, label=L"I", lw=1.5, framestyle = :box,titlefontsize=20)
-# p2 = plot(evarf/delta, Ivf, lc=:blue, label=L"I", lw=1.5, framestyle = :box,titlefontsize=20)
-vline!([2/1],linestyle=:dash,lc=:red)
-vline!([2/2],linestyle=:dash,lc=:red)
-vline!([2/3],linestyle=:dash,lc=:red)
-vline!([2/4],linestyle=:dash,lc=:red)
-vline!([2/5],linestyle=:dash,lc=:red)
-vline!([2/6],linestyle=:dash,lc=:red, label="")
-xlabel!(L"eV")
-ylabel!(L"I(V) R_N")
-plot!(titlefontsize=20)
-plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
-savefig(plot!(p2, dpi=450), "IV_Vbias_" * str2 * ".png")  
+p2 = plot(evar[evmin:Nev]/delta, Iv[evmin:Nev] * RN, lc=:blue, lw=1.5, framestyle=:box, label="")
+vline!(p2, thr_MAR, ls=:dash, lc=:red, lw=0.9, label=L"2\Delta/n")
+xlabel!(L"eV/\Delta"); ylabel!(L"I eR_N/\Delta")
+plot!(p2, legend=:topleft, legendfontsize=11, tickfontsize=20, guidefontsize=24, size=(680,480))
+savefig(plot!(p2, dpi=450), "IV_Vbias_" * str2 * ".png")
 
 evmin = 1;
 evmax = Nev;
-p2v = plot(evar[evmin:evmax]/delta, dIdv[evmin:evmax] * RN, label="", lc=:blue, lw=1.5, framestyle = :box,titlefontsize=20, legend=:topleft)
-vline!([2/1],linestyle=:dash,lc=:red, label="")
-vline!([2/2],linestyle=:dash,lc=:red, label="")
-vline!([2/3],linestyle=:dash,lc=:red, label="")
-vline!([2/4],linestyle=:dash,lc=:red, label="")
-vline!([2/5],linestyle=:dash,lc=:red, label="")
-vline!([2/6],linestyle=:dash,lc=:red, label="")
-xlabel!(L"eV/\Delta")
-ylabel!(L"(dI/dV) RN")
-plot!(titlefontsize=20)
-plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
-savefig(plot!(p2v, dpi=450), "dIdV_Vbias_" * str2 * ".png")  
+p2v = plot(evar[evmin:evmax]/delta, dIdv[evmin:evmax] * RN, lc=:blue, lw=1.5, framestyle=:box, label="")
+vline!(p2v, thr_MAR, ls=:dash, lc=:red, lw=0.9, label=L"2\Delta/n")
+xlabel!(L"eV/\Delta"); ylabel!(L"(dI/dV) eR_N/\Delta")
+plot!(p2v, legend=:topleft, legendfontsize=11, tickfontsize=20, guidefontsize=24, size=(680,480))
+savefig(plot!(p2v, dpi=450), "dIdV_Vbias_" * str2 * ".png")

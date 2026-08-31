@@ -32,10 +32,6 @@ RNTar = zeros(Float64, nT);
 for gh = 1:nT
     println("gh = $(gh)")
     for hi = 1:Nphi
-        # cphi2Tar[gh,hi] = Keldyshsetup_Floquetn.currentPhi_eq_T2(war1, zeta, delta, Tar[gh], Gamma, phiar[hi]);
-        # cphi4Tar[gh,hi] = Keldyshsetup_Floquetn.currentPhi_eq_T4(war1, zeta, delta, Tar[gh], Gamma, phiar[hi]);
-        # cphi6Tar[gh,hi] = Keldyshsetup_Floquetn.currentPhi_eq_T6(war1, zeta, delta, Tar[gh], Gamma, phiar[hi]);
-        # cphi8Tar[gh,hi] = Keldyshsetup_Floquetn.currentPhi_eq_T8(war1, zeta, delta, Tar[gh], Gamma, phiar[hi]);
         cphifTar[gh,hi] = Keldyshsetup_Floquetn.currentPhi_eq_Tfull(war1, zeta, delta, Tar[gh], Gamma, phiar[hi]);
     end
     Ic2Tar[gh] = maximum(cphi2Tar);

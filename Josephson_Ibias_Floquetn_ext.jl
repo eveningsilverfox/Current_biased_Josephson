@@ -38,19 +38,17 @@ JL = [0.0, 0.0, 1.0]; KL = 1.0;
 JR = [0.0, 0.0, 0.0]; KR = 0.0;
 
 #YSR bound-state energies (in-gap poles of each lead's impurity-dressed surface GF)
-EYSR_La = Keldyshsetup_Floquetn_ext.ysr_energies_analytical(JL, KL, zeta, delta);
-EYSR_Ra = Keldyshsetup_Floquetn_ext.ysr_energies_analytical(JR, KR, zeta, delta);
 EYSR_Ln = Keldyshsetup_Floquetn_ext.ysr_energies_numerical(JL, KL, zeta, delta);
 EYSR_Rn = Keldyshsetup_Floquetn_ext.ysr_energies_numerical(JR, KR, zeta, delta);
-println("YSR energies E/Δ  | L lead: analytical=$(round.(EYSR_La./delta, digits=5)) numerical=$(round.(EYSR_Ln./delta, digits=5))")
-println("                  | R lead: analytical=$(round.(EYSR_Ra./delta, digits=5)) numerical=$(round.(EYSR_Rn./delta, digits=5))")
+println("YSR energies E/Δ  | L lead: $(round.(EYSR_Ln./delta, digits=5))")
+println("                  | R lead: $(round.(EYSR_Rn./delta, digits=5))")
 
 #voltage
 signed_evar = true;
 if signed_evar
-    Nev1 = 160; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
+    Nev1 = 400; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 else
-    Nev = 160; evar = delta*range(0.24, 3.2, Nev);
+    Nev = 400; evar = delta*range(0.24, 3.2, Nev);
 end
 
 #time (for phase reconstruction)
@@ -101,23 +99,17 @@ else
     Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current)
 end
 
+# Centred differences, taken branch by branch
+dVg = evar[2]-evar[1];
+Nbr = signed_evar ? (1:count(<(0), evar), count(<(0), evar)+1:Nev) : (1:Nev,);
 dIdv = zeros(Float64, Nev);
-if signed_evar
-    Nneg = count(<(0), evar);
-    # dI/dV per branch (uniform step within each), then concatenate.
-    for hi = 1:Nneg-1
-        dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
+for br in Nbr
+    a, b = first(br), last(br);
+    for hi = a+1:b-1
+        dIdv[hi] = (Iv[hi+1]-Iv[hi-1]) / (evar[hi+1]-evar[hi-1]);
     end
-    dIdv[Nneg] = dIdv[Nneg-1] + (dIdv[Nneg-1]-dIdv[Nneg-2]);
-    for hi = Nneg+1:Nev-1
-        dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
-    end
-    dIdv[Nev] = dIdv[Nev-1] + (dIdv[Nev-1]-dIdv[Nev-2]);
-else
-    for hi = 1:Nev-1
-        dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
-    end
-    dIdv[Nev] = dIdv[Nev-1] + (dIdv[Nev-1]-dIdv[Nev-2])
+    dIdv[a] = (-3*Iv[a] + 4*Iv[a+1] - Iv[a+2]) / (2*dVg);   # one-sided, 2nd order
+    dIdv[b] = ( 3*Iv[b] - 4*Iv[b-1] + Iv[b-2]) / (2*dVg);
 end
 
 # Lower/upper envelopes of the (hysteretic) IV curve
@@ -176,7 +168,7 @@ if signed_evar
 else
     p2 = plot(evar./delta,  (Iv.*RN),  lc=:blue, lw=1.5, framestyle=:box)
 end
-xlabel!(L"eV/\Delta"); ylabel!(L"IeR_N/\Delta")
+xlabel!(L"e\langle V\ \rangle/\Delta"); ylabel!(L"IeR_N/\Delta")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
 let xlo = minimum(evar/delta), xhi = maximum(evar/delta), ylo = minimum(Iv .* RN), yhi = maximum(Iv .* RN)
     annotate!(p2, xlo + 0.03*(xhi-xlo), yhi - 0.07*(yhi-ylo), ysrann1)
@@ -190,7 +182,7 @@ if signed_evar
 else
     p2v = plot(evar./delta,  (dIdv.*RN),  lc=:blue, lw=1.5, framestyle=:box)
 end
-xlabel!(L"eV/\Delta"); ylabel!(L"(dI/dV)eR_N/\Delta")
+xlabel!(L"e\langle V\ \rangle/\Delta"); ylabel!(L"(dI/dV)eR_N/\Delta")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize=17, size=(500,400))
 let xlo = minimum(evar/delta), xhi = maximum(evar/delta), ylo = minimum(dIdv .* RN), yhi = maximum(dIdv .* RN)
     annotate!(p2v, xlo + 0.03*(xhi-xlo), yhi - 0.07*(yhi-ylo), ysrann1)

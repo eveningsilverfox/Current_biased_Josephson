@@ -9,9 +9,6 @@ using LaTeXStrings
 using NLsolve
 using JLD
 
-# ---------------------------------------------------------------------------
-# Transparency-sweep version of Josephson_cphir_ext.jl. 
-# ---------------------------------------------------------------------------
 
 #energies
 mu = 0; delta = 1; zeta = 5; Gamma = 1e-3;
@@ -26,11 +23,16 @@ NT = 8; Tmin = 1e-4; Tmax = 4; Tar = 10 .^ range(log10(Tmin), log10(Tmax), NT);
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 I(phi))
 #  collinear YSR:        JL=JR=[0,0,Jz]
 #  non-collinear/diode:  rotate JR vs JL, e.g. JR=Jz*[sin(th),0,cos(th)]
-JL = [0.0, 0.0, 5.0]; KL = 3.0;
-JR = [0.0, 0.0, 5.0]; KR = 0.0;
+JL = [0.0, 0.0, 3.0]; KL = 1.0;
+JR = [0.0, 0.0, 0.0]; KR = 0.0;
 
 #Phase
 Nphi = 50; phiar = 2*pi*range(0.0, 1.0, Nphi);
+
+# --- Floquet-machinery CPR (currentPhi_eq_Floquet_Tfull) discretisation knobs ---
+Omega_cpr = 0.4
+Nf_cpr = ceil(Int, 2*zeta/Omega_cpr)                                        # (Nf_cpr+0.5)*Omega_cpr >= 2*zeta, i.e. past the band edge sqrt(4 zeta^2 + delta^2)
+dw_cpr = minimum([0.015, Gamma/2.0])
 
 #naming
 fnum(x) = x isa Integer ? string(x) : replace(string(round(x, sigdigits=4)), "." => "p");   # numeric value -> filename token ('.' -> 'p')
@@ -46,7 +48,8 @@ RNTar   = zeros(Float64, NT);         # normal-state resistance
 for gh = 1:NT
     T = Tar[gh]
     for hi = 1:Nphi
-        cphiTar[gh,hi] = Keldyshsetup_Floquetn_ext.currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, phiar[hi], JL, KL, JR, KR);
+        # cphiTar[gh,hi] = Keldyshsetup_Floquetn_ext.currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, phiar[hi], JL, KL, JR, KR);
+        cphiTar[gh,hi] = Keldyshsetup_Floquetn_ext.currentPhi_eq_Floquet_Tfull(Omega_cpr, Nf_cpr, dw_cpr, zeta, delta, T, Gamma, phiar[hi], JL, KL, JR, KR);
     end
     IcpTar[gh] =  maximum(cphiTar[gh,:]);
     IcmTar[gh] = -minimum(cphiTar[gh,:]);
@@ -55,14 +58,7 @@ for gh = 1:NT
     println("T = $(round(T, sigdigits=4)) : Ic+ = $(round(IcpTar[gh], sigdigits=4)), Ic- = $(round(IcmTar[gh], sigdigits=4)), eta = $(round(etaTar[gh], sigdigits=3)), RN = $(round(RNTar[gh], sigdigits=4))");
 end
 
-
-## ----------sin(phi) / cos(phi) components of the CPR----------
-# I(phi) = sum_n [ A_n sin(n phi) + B_n cos(n phi) ]; the n=1 amplitudes are
-#   A_1 = (1/pi) int_0^{2pi} I(phi) sin(phi) dphi,  B_1 = (1/pi) int_0^{2pi} I(phi) cos(phi) dphi.
-# A_1 is the ordinary Josephson (sin) component; B_1 is the anomalous (cos) component, which
-# is nonzero only when time reversal is broken (the YSR impurities) and tilts the CPR into a
-# phi_0 junction. phiar carries both endpoints 0 and 2pi, so the periodic quadrature runs over
-# the first Nphi-1 points (trapezoid = rectangle rule for a periodic integrand).
+# I(phi) = sum_n [ A_n sin(n phi) + B_n cos(n phi) ].
 dphi = 2*pi/(Nphi-1); pint = 1:Nphi-1;
 A1Tar = zeros(Float64, NT);   # sin(phi) amplitude
 B1Tar = zeros(Float64, NT);   # cos(phi) amplitude
@@ -74,7 +70,6 @@ end
 
 
 ## ----------Plots----------
-# (1) critical current x R_N vs transparency; Ic+ and Ic- overlaid (equal => no static diode)
 p1 = plot(Tar, IcpTar .* RNTar, lc = "#1f5fb4", lw = 2.4, marker = :circle, ms = 4, label = L"I_c^{+}eR_N/\Delta")
 plot!(p1, Tar, IcmTar .* RNTar, lc = :red, lw = 2.4, alpha = 0.45, marker = :diamond, ms = 4, label = L"I_c^{-}eR_N/\Delta")
 plot!(p1, framestyle = :box, size = (640, 480),
@@ -88,7 +83,6 @@ xlabel!(p1, L"T")
 ylabel!(p1, L"I_c\,eR_N/\Delta")
 savefig(plot!(p1, dpi = 450), "IcTar_" * str1 * ".png")
 
-# (2) diode efficiency vs transparency (expected ~0 at every T: no static diode)
 p2 = plot(Tar, etaTar, lc = "#1f5fb4", lw = 2.4, marker = :circle, ms = 4)
 hline!(p2, [0.0], lc = :gray, lw = 1.0, alpha = 0.6)
 plot!(p2, framestyle = :box, size = (640, 480),
@@ -102,7 +96,6 @@ xlabel!(p2, L"T")
 ylabel!(p2, L"\eta")
 savefig(plot!(p2, dpi = 450), "etaTar_" * str1 * ".png")
 
-# (3) normalised CPR I e R_N/Delta for a spread of transparencies (dark=tunnel, bright=T~1)
 tidx = unique(round.(Int, range(1, NT, 6)));
 cols = palette(:viridis, length(tidx));
 p3 = plot(phiar ./ pi, cphiTar[tidx[1],:] .* (RNTar[tidx[1]]/delta), lc = cols[1], lw = 2.0, label = L"T=%$(round(Tar[tidx[1]], sigdigits=2))")
@@ -122,8 +115,6 @@ xlabel!(p3, L"\phi/\pi")
 ylabel!(p3, L"I(\phi)\,eR_N/\Delta")
 savefig(plot!(p3, dpi = 450), "cprTar_" * str1 * ".png")
 
-# (4) magnitude of the sin(phi) and cos(phi) CPR components vs transparency
-# (|B_1| stays 0 for a time-reversal-symmetric junction; it grows with the YSR exchange)
 p4 = plot(Tar, abs.(A1Tar) .* (RNTar ./ delta), lc = "#1f5fb4", lw = 2.4, marker = :circle, ms = 4, label = L"|A_1|eR_N/\Delta\ \ (\sin\phi)")
 plot!(p4, Tar, abs.(B1Tar) .* (RNTar ./ delta), lc = :red, lw = 2.4, marker = :diamond, ms = 4, label = L"|B_1|eR_N/\Delta\ \ (\cos\phi)")
 plot!(p4, framestyle = :box, size = (640, 480),
@@ -134,5 +125,5 @@ plot!(p4, framestyle = :box, size = (640, 480),
           tickfontsize = 14, guidefontsize = 18,
           grid = true, gridalpha = 0.18, gridstyle = :dot)
 xlabel!(p4, L"T")
-ylabel!(p4, L"|I_1|\,eR_N/\Delta")
+ylabel!(p4, L"I\,eR_N/\Delta")
 savefig(plot!(p4, dpi = 450), "cprharm_" * str1 * ".png")

@@ -67,23 +67,17 @@ else
     Iv, Vipsol, residualarr = Keldyshsetup_Floquetn.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Vipsolseed, Nevseed)
 end
 
+# Centred differences, taken branch by branch
+dVg = evar[2]-evar[1];
+Nbr = signed_evar ? (1:count(<(0), evar), count(<(0), evar)+1:Nev) : (1:Nev,);
 dIdv = zeros(Float64, Nev);
-if signed_evar
-    Nneg = count(<(0), evar);
-    # dI/dV per branch (uniform step within each), then concatenate.
-    for hi = 1:Nneg-1
-        dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
+for br in Nbr
+    a, b = first(br), last(br);
+    for hi = a+1:b-1
+        dIdv[hi] = (Iv[hi+1]-Iv[hi-1]) / (evar[hi+1]-evar[hi-1]);
     end
-    dIdv[Nneg] = dIdv[Nneg-1] + (dIdv[Nneg-1]-dIdv[Nneg-2]);
-    for hi = Nneg+1:Nev-1
-        dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
-    end
-    dIdv[Nev] = dIdv[Nev-1] + (dIdv[Nev-1]-dIdv[Nev-2]);
-else
-    for hi = 1:Nev-1
-        dIdv[hi] = (Iv[hi+1]-Iv[hi]) ./ (evar[2]-evar[1]);
-    end
-    dIdv[Nev] = dIdv[Nev-1] + (dIdv[Nev-1]-dIdv[Nev-2])
+    dIdv[a] = (-3*Iv[a] + 4*Iv[a+1] - Iv[a+2]) / (2*dVg);   # one-sided, 2nd order
+    dIdv[b] = ( 3*Iv[b] - 4*Iv[b-1] + Iv[b-2]) / (2*dVg);
 end
 
 # Lower and upper envelop of IV curve
@@ -122,12 +116,6 @@ end
 ## ------------RN--------------
 RN = Keldyshsetup_Floquetn.RN_full(Nf, dw0, zeta, delta, T, Gamma);
 
-## ------------Ic--------------
-Nphi  = 50
-phiar = 2*pi*range(0.0, 1.0, Nphi)
-cphi = Keldyshsetup_Floquetn.currentPhi_eq_Tfull(war1, zeta, delta, T, Gamma, ph);
-Ic = maximum(cphi)
-
 ## ------------Saving----------------
 save("Vipsol_" * str2 * ".jld", "Vipsol", Vipsol);
 save("IV_Ibias_" * str2 * ".jld", "Iv", Iv);
@@ -163,14 +151,19 @@ if ws == 2
         Iv2_2[hi] = real(sum(diag(If2_2)));
     end
 
-    for hi = 1:Nev-1
-        dIdv2_2[hi] = (Iv2_2[hi+1]-Iv2_2[hi]) ./ (evar[2]-evar[1]);
-        dIdv4_2[hi] = (Iv4_2[hi+1]-Iv4_2[hi]) ./ (evar[2]-evar[1]);
-        dIdv6_2[hi] = (Iv6_2[hi+1]-Iv6_2[hi]) ./ (evar[2]-evar[1]);
+    # Centred differences, taken branch by branch (same stencil as dIdv above)
+    for br in Nbr
+        a, b = first(br), last(br);
+        for hi = a+1:b-1
+            dIdv2_2[hi] = (Iv2_2[hi+1]-Iv2_2[hi-1]) / (evar[hi+1]-evar[hi-1]);
+            dIdv4_2[hi] = (Iv4_2[hi+1]-Iv4_2[hi-1]) / (evar[hi+1]-evar[hi-1]);
+            dIdv6_2[hi] = (Iv6_2[hi+1]-Iv6_2[hi-1]) / (evar[hi+1]-evar[hi-1]);
+        end
+        for (d, I) in ((dIdv2_2, Iv2_2), (dIdv4_2, Iv4_2), (dIdv6_2, Iv6_2))
+            d[a] = (-3*I[a] + 4*I[a+1] - I[a+2]) / (2*dVg);   # one-sided, 2nd order
+            d[b] = ( 3*I[b] - 4*I[b-1] + I[b-2]) / (2*dVg);
+        end
     end
-    dIdv2_2[Nev] = dIdv2_2[Nev-1] + (dIdv2_2[Nev-1]-dIdv2_2[Nev-2]);
-    dIdv4_2[Nev] = dIdv4_2[Nev-1] + (dIdv4_2[Nev-1]-dIdv4_2[Nev-2]);
-    dIdv6_2[Nev] = dIdv6_2[Nev-1] + (dIdv6_2[Nev-1]-dIdv6_2[Nev-2]);
 end
 
 
@@ -195,7 +188,6 @@ if signed_evar
 else
     p2 = plot(evar./delta,  (Iv.*RN),  lc=:blue, lw=1.5, framestyle=:box)
 end
-plot!(p2, [0.0, 0.0], [-Ic, Ic] .* RN, lc=colors[m], lw=2.2, marker=:hline, markersize=6, label="")
 xlabel!(L"eV/\Delta")
 ylabel!(L"IeR_N/\Delta")
 plot!(legend=:none, titlefontsize=20, tickfontsize=17, guidefontsize = 17, size=(500,400))
