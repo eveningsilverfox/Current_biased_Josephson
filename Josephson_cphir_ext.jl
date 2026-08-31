@@ -17,7 +17,7 @@ Nw1 = 2*ceil(Int, wmax/dw1); war1 = -wmax .+ ((0:Nw1-1) .+ 0.5) .* (2*wmax/Nw1);
 
 #transparency sweep: NT points, log-spaced from deep in the tunnel limit up to 1.0
 #(log spacing so the small-T tunnel regime is well resolved; for linear use range(Tmin,1.0,NT))
-NT = 8; Tmin = 1e-4; Tmax = 4; Tar = 10 .^ range(log10(Tmin), log10(Tmax), NT);
+NT = 8; Tmin = 1e-3; Tmax = zeta; Tar = 10 .^ range(log10(Tmin), log10(Tmax), NT);
 
 #classical-spin impurities (units of Delta): J = (Jx,Jy,Jz) exchange, K potential
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 I(phi))
@@ -68,6 +68,8 @@ for gh = 1:NT
     println("T = $(round(Tar[gh], sigdigits=4)) : A1 = $(round(A1Tar[gh], sigdigits=4)), B1 = $(round(B1Tar[gh], sigdigits=4)), |B1/A1| = $(round(abs(B1Tar[gh]/A1Tar[gh]), sigdigits=3)), phi0 = $(round(atan(B1Tar[gh], A1Tar[gh])/pi, sigdigits=3))pi");
 end
 
+## ----------Save----------
+save("cphir_" * str1 * ".jld", "phiar", collect(phiar), "Tar", collect(Tar), "cphiTar", cphiTar);
 
 ## ----------Plots----------
 p1 = plot(Tar, IcpTar .* RNTar, lc = "#1f5fb4", lw = 2.4, marker = :circle, ms = 4, label = L"I_c^{+}eR_N/\Delta")
