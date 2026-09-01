@@ -16,8 +16,9 @@ using JLD
 # demanding that only DC current flows (I_{2h}=0).
 # ---------------------------------------------------------------------------
 
-#size (Nf is the max Floquet support. phisolve starts at Nf_start and grows toward Nf as the
-#      phase spectrum widens at low |V|. Raise Nf for deeper low-|V| resolution, at rising cost.)
+#size (Nf is the Floquet support, held FIXED across the whole sweep. The phase spectrum widens as
+#      |V| falls, so Nf must be chosen for the LOWEST |V| in evar. Raise it for deeper low-|V|
+#      resolution, at rising cost; phisolve logs edge/peak per point so too small a window shows up.)
 # Nf_req ≈ 1.2/(V·Γ) # Empirically found
 # source	V	Γ	Nf	Nf·V·Γ
 # Γ-sweep	0.426	0.10	28	1.19
@@ -59,12 +60,12 @@ tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = rang
 #Scheme (only ws=0 supported in the 4x4 ext module)
 ws = 0;
 
-#Adaptive Floquet support (phisolve). The phase spectrum widens as |V| falls, so phisolve starts at
-#Nf_start at the largest |V| and, sweeping down, begins each point at the previous converged support
-#(non-decreasing) and grows Nf in steps of 2 -- up to the ceiling Nf above -- whenever the solve
-#misses tol_accept OR the converged spectrum still has weight at the cutoff (edge/peak > edge_tol).
-Nf_start = 12;      # Floquet support at the largest |V| (grows toward low |V|)
-edge_tol = 1e-3;    # grow Nf until |W| at the cutoff is below this fraction of the peak
+#Floquet-support diagnostic (phisolve). Nf is fixed for the sweep -- it is NOT grown adaptively.
+#Adaptive growth was removed because changing Nf between neighbouring bias points shifts I
+#discontinuously (~1% per step of 2), and differentiating that step across one voltage cell
+#produces a spurious dI/dV peak as tall as the real SGS features, sitting at whatever bias the
+#support happened to change. edge_tol only FLAGS under-resolved points in the log.
+edge_tol = 1e-3;    # warn if |W| at the Floquet cutoff exceeds this fraction of the peak
 
 
 #Current-row equilibration (phisolve scale_current). Row-scale the current-nulling equations
@@ -87,16 +88,16 @@ if signed_evar
 
     # Positive branch first: it carries the hard low-+V stalls, so solving it up front surfaces the
     # diagnosis quickly (identical to the unsigned run).
-    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current);
+    Ivp, Vipp, resp = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evarpos, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, edge_tol = edge_tol, scale_current = scale_current);
 
     # Negative branch: phisolve sweeps last->first, so pass it reversed to start
     # at the most-negative (largest |V|), then undo the reverse.
-    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current);
+    Ivn, Vipn, resn = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, reverse(evarneg), Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, edge_tol = edge_tol, scale_current = scale_current);
     Ivn = reverse(Ivn); Vipn = reverse(Vipn, dims=1); resn = reverse(resn);
 
     Iv = [Ivn; Ivp]; Vipsol = [Vipn; Vipp]; residualarr = [resn; resp];
 else
-    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, Nf_start = Nf_start, edge_tol = edge_tol, scale_current = scale_current)
+    Iv, Vipsol, residualarr = Keldyshsetup_Floquetn_ext.phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, itermax = 40, edge_tol = edge_tol, scale_current = scale_current)
 end
 
 # Centred differences, taken branch by branch

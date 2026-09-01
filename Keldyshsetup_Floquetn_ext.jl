@@ -2452,29 +2452,6 @@ function Vt(Vipi, Nf, tar0, Omega)
 end
 
 """
-    embed_seed(x, Nf_from, Nf_to) -> Vector{Float64}
-
-Zero-pad a packed phase-harmonic solution `x` (length `4*Nf_from`) into a wider `Nf_to` window
-(length `4*Nf_to`, `Nf_to >= Nf_from`). Harmonic `m` sits at index `Nf + (m+1)/2`, so both the real
-and imaginary blocks shift by `Nf_to - Nf_from` (staying centred on the fundamental) and the new
-outer harmonics are zero. Used to continue a solution as the Floquet support grows.
-"""
-function embed_seed(x, Nf_from, Nf_to)
-    if Nf_to == Nf_from
-        # # nothing to widen, return a copy
-        return copy(x)
-    end
-    y = zeros(Float64, 4*Nf_to)
-    d = Nf_to - Nf_from
-    # x = [2*Nf real parts ; 2*Nf imag parts], with harmonic m stored at index Nf+(m+1)/2, so the
-    # array is centered on the fundamental. Widening the window shifts every harmonic right by d in
-    # both blocks (fundamental stays central), the new outer high-|m| slots are left at zero.
-    @views y[(1+d):(2*Nf_from+d)]                 .= x[1:(2*Nf_from)]               # real block, shifted by d
-    @views y[(2*Nf_to+1+d):(2*Nf_to+2*Nf_from+d)] .= x[(2*Nf_from+1):(4*Nf_from)]   # imag block, shifted by d
-    return y
-end
-
-"""
     edgepeak(x, Nf) -> Float64
 
 Fraction of phase-harmonic weight sitting at the Floquet cutoff,
@@ -2498,13 +2475,16 @@ end
 
 Main current-bias driver for the 4x4 Nambu(x)spin (YSR) module. Sweeps `evar` high->low,
 solving F(x)=0 at each bias with `NLsolve.nlsolve` (:trust_region) and the analytic
-`IbiasJacobian_Tfull`, continuing from the previous converged solution (zero-padded by
-`embed_seed`; the largest-|V| point uses the trivial seed). Per-lead impurities `JL,KL` /
-`JR,KR`; only `ws=0` (exact Dyson) is supported.
+`IbiasJacobian_Tfull`, continuing from the previous converged solution (the largest-|V| point
+uses the trivial seed). Per-lead impurities `JL,KL` / `JR,KR`; only `ws=0` (exact Dyson) is
+supported.
+
+The Floquet support `Nf` is fixed for the whole sweep. 
 
 Keywords, any order: `ftols` (1e-16), `xtols` (1e-13), `itermax` (60) set the nlsolve exit
-criteria; `tol_accept` (1e-12) is the residual counting as converged; `Nf_start` (20) and
-`edge_tol` (1e-3) drive the adaptive support, with the positional `Nf` as its ceiling.
+criteria; `tol_accept` (1e-12) is the residual counting as converged; `edge_tol` (1e-3) is a
+diagnostic threshold only, points whose phase spectrum still carries more than this fraction
+of its peak weight at the Floquet cutoff are flagged in the log as under-resolved.
 
 `scale_current` (default `false`) multiplies the current-nulling rows `2Nf+1:4Nf` of `F` and
 its Jacobian by `RN`, lifting them from `Ic ~ Delta/RN` to O(Delta) like the unitarity/gauge
@@ -2512,38 +2492,25 @@ rows. Row scaling is exact-Newton invariant so the root is unchanged, but it rew
 trust-region merit and hence the search path -- which may help or hurt at hard points, so it
 is opt-in. When on, `residualarr` and the `ftol`/`tol_accept` tests are in the scaled metric.
 
-Adaptive Floquet support: the phase spectrum widens as |V| falls, so the support starts at the
-previous converged value (non-decreasing, from `Nf_start`) and grows in steps of 2, re-seeding
-each time, whenever the solve misses `tol_accept` or still carries weight at the cutoff
-(`edgepeak` > `edge_tol`). At the ceiling the iterate is accepted as-is, converged or not, with
-its residual and edge/peak logged. Returned solutions are zero-padded to the ceiling width.
-
 # Returns
 - `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
 function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
                   ftols = 1e-16, xtols = 1e-13, itermax = 60, tol_accept = 1e-12, scale_current = false,
-                  Nf_start = 20, edge_tol = 1e-3)
-    Nfmax = Nf;                          # the positional `Nf` is the ceiling on the adaptive Floquet support
-    Nf_start = min(Nf_start, Nfmax);     
-
-    Nev = length(evar);    
+                  edge_tol = 1e-3)
+    Nev = length(evar);
     Iv = zeros(Float64, Nev);
-    Vipsol = zeros(Float64, Nev, 2*(2*Nfmax));   # (2Nf real)+(2Nf imag); stored zero-padded to the ceiling width
+    Vipsol = zeros(Float64, Nev, 2*(2*Nf));      # (2Nf real)+(2Nf imag)
     residualarr = zeros(Float64, Nev);
-    Nfused = zeros(Int, Nev);                    # Floquet support actually used at each bias point (for the log)
 
     #--Current-row equilibration (opt-in via scale_current). RN row-scales the current-nulling rows
     # 2Nf+1:4Nf (natural scale Ic~Delta/RN) up to O(Delta) like the unitarity/gauge rows; it leaves the
-    # root unchanged (row scaling is exact-Newton invariant) but changes the trust-region path. RN is
-    # ~Nf-independent (normal-state), so it is computed once at the ceiling.
-    RN = scale_current ? Keldyshsetup_Floquetn_ext.RN_full(Nfmax, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR) : 1.0;
+    # root unchanged (row scaling is exact-Newton invariant) but changes the trust-region path.
+    RN = scale_current ? Keldyshsetup_Floquetn_ext.RN_full(Nf, dw0, zeta, delta, T, Gamma, JL, KL, JR, KR) : 1.0;
+    rowscale = ones(Float64, 4*Nf); rowscale[(2*Nf+1):(4*Nf)] .= RN;
 
-    # Floquet support: the Floquet spectrum/support widens as |V| falls, so we must increase Nf at
-    # low bias. Start at Nf_start (largest |V|), for each lower-|V| point begin at the previous converged
-    # support and grow Nf_try by 2 whenever the solve misses tol_accept or the converged Floquet spectrum 
-    # still has weight at the cutoff (edgepeak > edge_tol). Floquet modes Nf_try capped at Nfmax.
-    have_prev = false; xprev = Float64[]; Nfprev = Nf_start;
+    unresolved = Int[];                          # bias indices that missed tol_accept or edge_tol
+    have_prev = false; xprev = Float64[];
 
     for hi = Nev:-1:1
         println("ev iter = ",hi)
@@ -2552,68 +2519,46 @@ function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR;
         Nw0 = 2*ceil(Int, abs(Omega)/(2*dw0));                             # even cell count: PH-symmetric midpoint sampling
         war0 = -0.5*abs(Omega) .+ ((0:Nw0-1) .+ 0.5) .* (abs(Omega)/Nw0);  # midpoint rule: no sample on the T=0 occupation step
 
-        # ---- Adaptive Floquet support: grow Nf until the solve converges and the spectrum fits ----
-        # Start at the previous converged support (>= rule); grow by 2 -- re-seeding by zero-padding the
-        # previous solution -- whenever the residual misses tol_accept or the spectrum still hits the cutoff.
-        # Floquet support for this point: resume at the previous point's converged support
-        # (non-decreasing down the sweep); the first point starts at Nf_start.
-        Nf_try = have_prev ? Nfprev : Nf_start
-        xacc = Float64[] # accepted solution
-        racc = NaN # accepted residual
-        Nf_acc = Nf_try
-        # resolved = true only when a solve satisfies both criteria: resid < tol_accept and edgepeak < edge_tol.
-        # Every point is accepted either way; resolved only flags whether it met both, for the log.
-        resolved = false
-        while true
-            if have_prev
-                seed = Keldyshsetup_Floquetn_ext.embed_seed(xprev, Nfprev, Nf_try);   # continuation, zero-padded
-            else
-                seed = zeros(Float64, 2*(2*Nf_try)); seed[Nf_try] = 1.0;  # trivial DC voltage bias seed (m=-1), first point
-            end
-            rowscale = ones(Float64, 4*Nf_try); rowscale[(2*Nf_try+1):(4*Nf_try)] .= RN;
-            Fs = ws == 4 ? (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasResidual_T4(x, war0, Omega, Nf_try, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
-                 ws == 2 ? (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasResidual_T2(x, war0, Omega, Nf_try, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
-                           (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf_try, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
-            Js = ws == 4 ? (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasJacobian_T4(x, war0, Omega, Nf_try, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
-                 ws == 2 ? (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasJacobian_T2(x, war0, Omega, Nf_try, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
-                           (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf_try, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
+        # continuation: seed from the previous (higher-|V|) point; the first point uses the
+        # trivial DC-voltage-bias seed (m=-1). Nf never changes, so no re-embedding is needed.
+        seed = have_prev ? copy(xprev) : (s = zeros(Float64, 2*(2*Nf)); s[Nf] = 1.0; s)
 
-            t0 = time();
-            res = nlsolve(Fs, Js, seed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
-            resid = res.residual_norm; ep = Keldyshsetup_Floquetn_ext.edgepeak(res.zero, Nf_try);
-            xacc = res.zero; racc = resid; Nf_acc = Nf_try;
-            println("   Nf = $Nf_try : residual = $resid, edge/peak = $(round(ep, sigdigits=3)), time = $(round(time()-t0, digits=2))");
+        Fs = ws == 4 ? (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasResidual_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
+             ws == 2 ? (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasResidual_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
+                       (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
+        Js = ws == 4 ? (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasJacobian_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
+             ws == 2 ? (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasJacobian_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi)) :
+                       (x -> rowscale .* Keldyshsetup_Floquetn_ext.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, JL, KL, JR, KR, hi));
 
-            if resid < tol_accept && ep < edge_tol
-                resolved = true; break  # converged and the spectrum fits the window
-            elseif Nf_try + 2 <= Nfmax
-                Nf_try += 2     # widen the Floquet window and retry
-            else
-                # No more support to give. Accept the trust-region iterate as it stands.
-                break
-            end
+        t0 = time();
+        res = nlsolve(Fs, Js, seed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
+        resid = res.residual_norm; ep = Keldyshsetup_Floquetn_ext.edgepeak(res.zero, Nf);
+        println("   Nf = $Nf : residual = $resid, edge/peak = $(round(ep, sigdigits=3)), time = $(round(time()-t0, digits=2))");
+
+        Vipsol[hi,:] = res.zero
+        residualarr[hi] = resid
+        have_prev = true; xprev = res.zero;
+
+        ok = resid < tol_accept && ep < edge_tol
+        ok || push!(unresolved, hi)
+        println(ok ? "-- ev iter $hi converged (residual = $resid)" :
+                     "-- ev iter $hi UNDER-RESOLVED (residual = $resid, edge/peak = $(round(ep, sigdigits=3))) -- raise Nf or itermax")
+
+        VipI = zeros(ComplexF64, 4*Nf+1);
+        for kl = 1:2*Nf
+            VipI[2*kl] = res.zero[kl] + im*res.zero[(2*Nf)+kl];
         end
-
-        Vipsol[hi,:] = Keldyshsetup_Floquetn_ext.embed_seed(xacc, Nf_acc, Nfmax);   # store zero-padded to the ceiling width
-        residualarr[hi] = racc
-        Nfused[hi] = Nf_acc
-
-        # Every point is accepted: advance the (non-decreasing) support anchor, then find the DC
-        # current at the used support.
-        have_prev = true; xprev = xacc; Nfprev = Nf_acc;
-        VipI = zeros(ComplexF64, 4*Nf_acc+1);
-        for kl = 1:2*Nf_acc
-            VipI[2*kl] = xacc[kl] + im*xacc[(2*Nf_acc)+kl];
-        end
-        Iif = ws == 4 ? Keldyshsetup_Floquetn_ext.current_Floquet_T4(war0, Omega, Nf_acc, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi) :
-              ws == 2 ? Keldyshsetup_Floquetn_ext.current_Floquet_T2(war0, Omega, Nf_acc, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi) :
-                        Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf_acc, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi);
+        Iif = ws == 4 ? Keldyshsetup_Floquetn_ext.current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi) :
+              ws == 2 ? Keldyshsetup_Floquetn_ext.current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi) :
+                        Keldyshsetup_Floquetn_ext.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, JL, KL, JR, KR, hi);
         Iv[hi] = real(sum(diag(Iif)));
-        println(resolved ? "-- ev iter $hi converged at Nf = $Nf_acc (residual = $racc)" :
-                           "-- ev iter $hi accepted at Nf = $Nf_acc WITHOUT meeting tolerance (residual = $racc, edge/peak = $(round(Keldyshsetup_Floquetn_ext.edgepeak(xacc, Nf_acc), sigdigits=3)))")
     end
 
-    println("-- Nf used per ev iter (index = hi): ", Nfused)
+    if isempty(unresolved)
+        println("-- all $Nev points converged at Nf = $Nf")
+    else
+        println("-- Nf = $Nf : $(length(unresolved)) of $Nev points under-resolved, at ev iter ", sort(unresolved))
+    end
 
     return Iv, Vipsol, residualarr
 end
