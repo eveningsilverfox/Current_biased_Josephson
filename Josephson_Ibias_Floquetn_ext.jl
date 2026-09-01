@@ -16,17 +16,8 @@ using JLD
 # demanding that only DC current flows (I_{2h}=0).
 # ---------------------------------------------------------------------------
 
-#size (Nf is the Floquet support, held FIXED across the whole sweep. The phase spectrum widens as
-#      |V| falls, so Nf must be chosen for the LOWEST |V| in evar. Raise it for deeper low-|V|
-#      resolution, at rising cost; phisolve logs edge/peak per point so too small a window shows up.)
-# Nf_req ≈ 1.2/(V·Γ) # Empirically found
-# source	V	Γ	Nf	Nf·V·Γ
-# Γ-sweep	0.426	0.10	28	1.19
-# Γ-sweep	0.426	0.09	30	1.15
-# Γ-sweep	0.426	0.08	34	1.16
-# V-sweep	0.240	0.10	48	1.15
-# V-sweep	0.333	0.10	34	1.13
-# V-sweep	0.519	0.10	24	1.25
+#size (Nf is the Floquet support, held fixed across the whole sweep. The phase spectrum widens as
+#      |V| falls, so Nf must be chosen for the lowest |V| in evar.)
 Nf = 32;
 
 #energies
@@ -60,11 +51,7 @@ tmax = 100; dt = 2*pi/(Nf*maximum(evar)); Nt0 = trunc(Int, tmax/dt); tar0 = rang
 #Scheme (only ws=0 supported in the 4x4 ext module)
 ws = 0;
 
-#Floquet-support diagnostic (phisolve). Nf is fixed for the sweep -- it is NOT grown adaptively.
-#Adaptive growth was removed because changing Nf between neighbouring bias points shifts I
-#discontinuously (~1% per step of 2), and differentiating that step across one voltage cell
-#produces a spurious dI/dV peak as tall as the real SGS features, sitting at whatever bias the
-#support happened to change. edge_tol only FLAGS under-resolved points in the log.
+#Floquet-support diagnostic (phisolve).
 edge_tol = 1e-3;    # warn if |W| at the Floquet cutoff exceeds this fraction of the peak
 
 
