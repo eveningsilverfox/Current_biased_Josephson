@@ -36,8 +36,8 @@ transparency (Werthamer-type) expansion of the current at orders `T²`, `T⁴`, 
 is provided to dissect which microscopic processes produce each I–V feature.
 
 A self-contained derivation of every equation solved by the code is in
-[`docs/Keldysh_floquet_Vbias_Ibias.pdf`](docs/Keldysh_floquet_Vbias_Ibias.pdf)
-(source: `docs/Keldysh_floquet_Vbias_Ibias.tex`).
+[`docs/Theory/Keldysh_floquet_Vbias_Ibias.pdf`](docs/Theory/Keldysh_floquet_Vbias_Ibias.pdf)
+(source: `docs/Theory/Keldysh_floquet_Vbias_Ibias.tex`).
 
 ## Requirements
 
@@ -46,8 +46,8 @@ A self-contained derivation of every equation solved by the code is in
   ```sh
   curl -fsSL https://install.julialang.org | sh
   ```
-- Packages: `MKL`, `LinearAlgebra`, `Statistics`, `Plots`, `LaTeXStrings`,
-  `NLsolve`, `JLD`, `OhMyThreads`, `Symbolics`, `Printf`, `SpecialFunctions`.
+- Packages: `MKL`, `LinearAlgebra`, `Statistics`, `SparseArrays`, `Plots`,
+  `LaTeXStrings`, `NLsolve`, `JLD`, `OhMyThreads`, `Symbolics`, `Printf`.
 
 There is no `Project.toml` checked in — install the packages above into your
 Julia environment, e.g.:
@@ -55,7 +55,7 @@ Julia environment, e.g.:
 ```julia
 import Pkg
 Pkg.add(["MKL","Plots","LaTeXStrings","NLsolve","JLD","OhMyThreads",
-         "Symbolics","SpecialFunctions"])
+         "Symbolics"])
 ```
 
 The hot loops use `Threads.@threads`; start Julia with multiple threads
@@ -75,21 +75,16 @@ The hot loops use `Threads.@threads`; start Julia with multiple threads
 | File | Purpose |
 | --- | --- |
 | `Josephson_Ibias_Floquetn.jl` | Main current-biased driver — reproduces the paper figures; compares exact vs. perturbative currents. |
-| `Josephson_Ibias_Floquetn_Tar.jl` | Current-biased, swept over transparency `T`. |
 | `Josephson_Vbias_Floquetn.jl` | Voltage-biased case (no self-consistency). |
 | `Josephson_Vbias_MPT.jl` | Voltage-biased multiparticle-tunnelling (real-frequency) currents. |
 | `Josephson_cphir.jl` | Equilibrium current–phase relation `I(φ)` and critical current. |
 | `Josephson_Ibias_Floquetn_ext.jl` | Current-biased driver for the 4×4 (YSR) module. |
 | `Josephson_Vbias_Floquetn_ext.jl` | Voltage-biased driver for the 4×4 (YSR) module. |
-| `Josephson_Ibias_KLscan_ext.jl` | Diagnostic: single-voltage homotopy scan in `KL` (fine-step continuation vs. fold discrimination). |
-| `Josephson_Ibias_stalldiag_ext.jl` | Diagnostic: at stalled bias points, Jacobian SVD (fold detector) + least-squares stationarity probe (root missing vs. solver stuck) + `Nf` tail check. |
-| `Josephson_Ibias_arclength_ext.jl` | Pseudo-arclength continuation in `eV`: follows the running-solution branch through folds that defeat fixed-`eV` solvers (the `KL≠0` low-bias band). |
+| `Josephson_cphir_ext.jl` | Equilibrium current–phase relation and critical current for the 4×4 (YSR) module. |
 
 **Other**
 
-- `docs/` — the technical notes (PDF + LaTeX source) deriving the formalism.
-- `Plots/` — saved figures (`.png`) and cached solutions (`.jld`).
-- `job_scripts/` — cluster submission scripts.
+- `docs/Theory/` — the technical notes (PDF + LaTeX source) deriving the formalism.
 
 ## Usage
 
@@ -107,12 +102,19 @@ Or, you may run it directly as
 julia -t num_threads Josephson_Ibias_Floquetn.jl
 ```
 
-Each driver sets its parameters at the top (`Nf` Floquet harmonics, `delta`,
-`zeta`, `T`, `Gamma`, the bias array `evar`, and the scheme flag `ws` — `ws=0`
-exact Dyson, `ws=2,4,…` truncated transparency orders), runs the solve/sweep,
-and produces the I–V and `dI/dV` plots. Heavy runs cache to `.jld` files in
+Each driver sets its parameters at the top: `delta`, `zeta`, `Gamma` and the
+hopping `T` throughout, plus — for the Floquet I–V drivers — the number of
+harmonics `Nf`, the bias array `evar`, and the scheme flag `ws`. Those drivers
+run the solve/sweep and produce the I–V and `dI/dV` plots. The `cphir` drivers
+instead sweep transparency over `Tar` and produce `I(φ)` and the critical
+current, and take no `evar` or `ws`. Heavy runs cache to `.jld` files in
 `Plots/`; the naming strings (`str1`/`str2`) encode the full parameter set, so
 re-loading a cached result requires matching them.
+
+The scheme flag selects `ws=0` (exact Dyson, the default) or `ws=2` / `ws=4`
+(transparency-truncated). Those three are the only values `phisolve` dispatches
+on — `Glesser_Floquet_T6`/`T8` exist in the 2×2 module but are not reachable
+through `ws`. The 4×4 (YSR) module supports `ws=0` only.
 
 ## The 4×4 Yu–Shiba–Rusinov extension
 
@@ -121,7 +123,7 @@ basis `(c↑, c↓, c↑†, c↓†)`, so that **classical-spin (magnetic) impu
 be placed on each lead via a local Dyson dressing of the surface Green's
 function. Each lead carries its own exchange and potential scattering terms, passed 
 as `JL, KL, JR, KR`. The corresponding derivation is present in Section 10 of the technical 
-notes in `docs/`.
+notes in `docs/Theory/`.
 
 ## Citation
 
