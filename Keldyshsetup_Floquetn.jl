@@ -2311,103 +2311,117 @@ function Vt(Vipi, Nf, tar0, Omega)
 end
 
 """
+    edgepeak(x, Nf) -> Float64
+
+Fraction of phase-harmonic weight sitting at the Floquet cutoff,
+`max(|W_{-(2Nf-1)}|, |W_{+(2Nf-1)}|) / max_m |W_m|`, for a packed solution `x` (length `4*Nf`).
+Small means the spectrum has decayed inside the window; O(0.1) means it has outgrown it.
+"""
+function edgepeak(x, Nf)
+    pk = 0.0
+    for jk in 1:2*Nf
+        w = norm((x[jk], x[2*Nf+jk]))
+        if w > pk 
+            pk = w
+        end
+    end
+    return max(norm((x[1], x[2*Nf+1])), norm((x[2*Nf], x[4*Nf]))) / pk
+end
+
+"""
     phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma,
              Vipsolseed=nothing, Nevseed=nothing) -> (Iv, Vipsol, residualarr)
 
-Main current-bias driver. For each bias `eV` in `evar` (swept high→low with
-continuation: the converged phase at one bias seeds the next), solves the self-
-consistency `F(x)=0` with `NLsolve.nlsolve` (`:trust_region`), selecting the
-transparency-order scheme by the flag `ws` (0 = exact Dyson, 2/4/6/8 = truncated):
-it calls the matching `IbiasResidual_Tfull`/`_T2…` and, for `ws=0,2,4`, the
-analytic `IbiasJacobian_Tfull`/`_T2`/`_T4`. `dw0` sets the energy-grid
-spacing; optional `Vipsolseed`/`Nevseed` warm-start the highest-bias point.
+Main current-bias driver. Sweeps `evar` high->low, solving F(x)=0 at each bias with
+`NLsolve.nlsolve` (:trust_region) and the matching analytic Jacobian, continuing from the
+previous converged solution (the largest-|V| point uses the trivial DC seed, or row `Nevseed`
+of `Vipsolseed` when those are supplied). The transparency-order scheme is set by the flag
+`ws` (0 = exact Dyson, 2/4 = truncated `IbiasResidual_T2`/`_T4` + `IbiasJacobian_T2`/`_T4`);
+`dw0` sets the energy-grid spacing.
+
+The Floquet support `Nf` is fixed for the whole sweep.
+
+Keywords, any order: `ftols` (1e-16), `xtols` (1e-13), `itermax` (60) set the nlsolve exit
+criteria; `tol_accept` (1e-12) is the residual counting as converged; `edge_tol` (1e-3) is a
+diagnostic threshold only, points whose phase spectrum still carries more than this fraction
+of its peak weight at the Floquet cutoff are flagged in the log as under-resolved.
+
+`scale_current` (default `false`) multiplies the current-nulling rows `2Nf+1:4Nf` of `F` and
+its Jacobian by `RN`, lifting them from `Ic ~ Delta/RN` to O(Delta) like the unitarity/gauge
+rows. Row scaling is exact-Newton invariant so the root is unchanged, but it reweights the
+trust-region merit and hence the search path -- which may help or hurt at hard points, so it
+is opt-in. When on, `residualarr` and the `ftol`/`tol_accept` tests are in the scaled metric.
 
 # Returns
-- `Iv`: DC current vs bias.
-- `Vipsol`: solved phase coefficients per bias (rows).
-- `residualarr`: final residual norm per bias.
+- `Iv`: DC current vs bias;  `Vipsol`: solved phase coefficients per bias;  `residualarr`: final residual norm.
 """
-function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Vipsolseed = nothing, Nevseed = nothing)
+function phisolve(ws, dw0, evar, Nf, zeta, delta, T, Gamma, Vipsolseed = nothing, Nevseed = nothing;
+                  ftols = 1e-16, xtols = 1e-13, itermax = 60, tol_accept = 1e-12, scale_current = false,
+                  edge_tol = 1e-3)
     Nev = length(evar);
-
-    If = zeros(ComplexF64, Nev,2*Nf+1,2*Nf+1); Ifa = zeros(ComplexF64, Nev,4*Nf+1); Iv = zeros(Float64, Nev);
-    Vipsol = zeros(Float64, Nev, 2*(2*Nf)); #(2*Nf) real + (2*Nf) imag #I_mn, Gr_mn, m,n \in -Nf:+Nf, => V_m m \in -2Nf:2Nf. Only odd multiples of eV kept
-    Vipseed = zeros(Float64, 2*(2*Nf)); #(2*Nf) real + (2*Nf) imag
+    Iv = zeros(Float64, Nev);
+    Vipsol = zeros(Float64, Nev, 2*(2*Nf));      # (2Nf real)+(2Nf imag)
     residualarr = zeros(Float64, Nev);
 
-    ftols = 5e-13; xtols = 1e-13; itermax = 200;
+    #--Current-row equilibration (opt-in via scale_current). RN row-scales the current-nulling rows
+    # 2Nf+1:4Nf (natural scale Ic~Delta/RN) up to O(Delta) like the unitarity/gauge rows; it leaves the
+    # root unchanged (row scaling is exact-Newton invariant) but changes the trust-region path.
+    RN = scale_current ? Keldyshsetup_Floquetn.RN_full(Nf, dw0, zeta, delta, T, Gamma) : 1.0;
+    rowscale = ones(Float64, 4*Nf); rowscale[(2*Nf+1):(4*Nf)] .= RN;
+
+    unresolved = Int[];                          # bias indices that missed tol_accept or edge_tol
+    have_prev = false; xprev = Float64[];
 
     for hi = Nev:-1:1
         println("ev iter = ",hi)
-        
+
         ev = evar[hi]; Omega = ev;
         Nw0 = 2*ceil(Int, abs(Omega)/(2*dw0));                             # even cell count: PH-symmetric midpoint sampling
         war0 = -0.5*abs(Omega) .+ ((0:Nw0-1) .+ 0.5) .* (abs(Omega)/Nw0);  # midpoint rule: no sample on the T=0 occupation step
-        
-        if hi == Nev
-            if Vipsolseed == nothing
-                Vipseed[Nf] = 1;
-            else
-                Vipseed = Vipsolseed[Nevseed,:];
-            end
-        else
-            Vipseed .= Vipsol[hi+1,:];
-        end
-    
-        if hi>trunc(Int,0.6*Nev)
-            ftols = 5e-17;
-        end
-    
-        if ws == 4
-            fvalue = norm(Keldyshsetup_Floquetn.IbiasResidual_T4(Vipseed, war0, Omega, Nf, zeta, delta, T, Gamma,  hi));
-        elseif ws == 2
-            fvalue = norm(Keldyshsetup_Floquetn.IbiasResidual_T2(Vipseed, war0, Omega, Nf, zeta, delta, T, Gamma,  hi));
-        elseif ws == 0
-            fvalue = norm(Keldyshsetup_Floquetn.IbiasResidual_Tfull(Vipseed, war0, Omega, Nf, zeta, delta, T, Gamma, hi));
-        end
-        
-        if fvalue < ftols
-            Vipsol[hi,:] = Vipseed;
-            residualarr[hi] = fvalue;
-        else     
-            t0 = time()
-            
-            if ws == 4
-                res = nlsolve(x -> Keldyshsetup_Floquetn.IbiasResidual_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi), x -> Keldyshsetup_Floquetn.IbiasJacobian_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
-            elseif ws == 2 
-                res = nlsolve(x -> Keldyshsetup_Floquetn.IbiasResidual_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi), x -> Keldyshsetup_Floquetn.IbiasJacobian_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
-            elseif ws == 0 
-                res = nlsolve(x -> Keldyshsetup_Floquetn.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi), x -> Keldyshsetup_Floquetn.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi), Vipseed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
-            end
-            
-            t1 = time()
-            println("time = ",t1-t0)
-            Vipsol[hi,:] = res.zero;
-            residualarr[hi] = res.residual_norm;
-    
-        end
-        
+
+        # continuation: seed from the previous (higher-|V|) point; the first point uses the
+        # trivial DC-voltage-bias seed (m=-1), or the supplied warm start. Nf never changes,
+        # so no re-embedding is needed.
+        seed = have_prev ? copy(xprev) :
+               Vipsolseed !== nothing ? Vector{Float64}(Vipsolseed[Nevseed,:]) :
+               (s = zeros(Float64, 2*(2*Nf)); s[Nf] = 1.0; s)
+
+        Fs = ws == 4 ? (x -> rowscale .* Keldyshsetup_Floquetn.IbiasResidual_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi)) :
+             ws == 2 ? (x -> rowscale .* Keldyshsetup_Floquetn.IbiasResidual_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi)) :
+                       (x -> rowscale .* Keldyshsetup_Floquetn.IbiasResidual_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi));
+        Js = ws == 4 ? (x -> rowscale .* Keldyshsetup_Floquetn.IbiasJacobian_T4(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi)) :
+             ws == 2 ? (x -> rowscale .* Keldyshsetup_Floquetn.IbiasJacobian_T2(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi)) :
+                       (x -> rowscale .* Keldyshsetup_Floquetn.IbiasJacobian_Tfull(x, war0, Omega, Nf, zeta, delta, T, Gamma, hi));
+
+        t0 = time();
+        res = nlsolve(Fs, Js, seed, show_trace=true, method = :trust_region, ftol = ftols; xtol = xtols, iterations = itermax);
+        resid = res.residual_norm; ep = Keldyshsetup_Floquetn.edgepeak(res.zero, Nf);
+        println("   Nf = $Nf : residual = $resid, edge/peak = $(round(ep, sigdigits=3)), time = $(round(time()-t0, digits=2))");
+
+        Vipsol[hi,:] = res.zero
+        residualarr[hi] = resid
+        have_prev = true; xprev = res.zero;
+
+        ok = resid < tol_accept && ep < edge_tol
+        ok || push!(unresolved, hi)
+        println(ok ? "-- ev iter $hi converged (residual = $resid)" :
+                     "-- ev iter $hi UNDER-RESOLVED (residual = $resid, edge/peak = $(round(ep, sigdigits=3))) -- raise Nf or itermax")
+
         #find current using solution, verify only DC component present
         VipI = zeros(ComplexF64, 4*Nf+1);
         for kl = 1:2*Nf
-            VipI[2*kl] = Vipsol[hi,kl] + im*Vipsol[hi,(2*Nf)+kl];
+            VipI[2*kl] = res.zero[kl] + im*res.zero[(2*Nf)+kl];
         end
-    
-        if ws == 4 
-            If[hi,:,:] = Keldyshsetup_Floquetn.current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, hi);
-        elseif ws == 2 
-            If[hi,:,:] = Keldyshsetup_Floquetn.current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, hi);
-        elseif ws == 0 
-            If[hi,:,:] = Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, hi);
-        end
-        
-        for kl = -Nf:Nf
-            for lm = -Nf:Nf
-                Ifa[hi,-(kl-lm)+(2*Nf+1)] = Ifa[hi,-(kl-lm)+(2*Nf+1)] + If[hi,-kl+Nf+1,-lm+Nf+1];
-            end
-        end
-    
-        Iv[hi] = real(sum(diag(If[hi,:,:])));
+        Iif = ws == 4 ? Keldyshsetup_Floquetn.current_Floquet_T4(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, hi) :
+              ws == 2 ? Keldyshsetup_Floquetn.current_Floquet_T2(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, hi) :
+                        Keldyshsetup_Floquetn.current_Floquet_Tfull(war0, Omega, Nf, zeta, delta, T, Gamma, VipI, hi);
+        Iv[hi] = real(sum(diag(Iif)));
+    end
+
+    if isempty(unresolved)
+        println("-- all $Nev points converged at Nf = $Nf")
+    else
+        println("-- Nf = $Nf : $(length(unresolved)) of $Nev points under-resolved, at ev iter ", sort(unresolved))
     end
 
     return Iv, Vipsol, residualarr

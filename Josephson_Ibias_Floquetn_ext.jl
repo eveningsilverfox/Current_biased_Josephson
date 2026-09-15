@@ -16,9 +16,8 @@ using JLD
 # demanding that only DC current flows (I_{2h}=0).
 # ---------------------------------------------------------------------------
 
-#size (Nf is the Floquet support, held fixed across the whole sweep. The phase spectrum widens as
-#      |V| falls, so Nf must be chosen for the lowest |V| in evar.)
-Nf = 32;
+#size (Nf is the Floquet support, held fixed across the whole sweep.
+Nf = 24;
 
 #energies
 mu = 0; delta = 1; zeta = 5; T = 0.6; Gamma = 5e-2;
@@ -26,7 +25,7 @@ dw0 = minimum([0.015, Gamma/2.0]);
 
 #classical-spin impurities (units of Delta): J=(Jx,Jy,Jz) exchange, K potential
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 self-consistent I-V)
-JL = [0.0, 0.0, 1.0]; KL = 1.0;
+JL = [0.0, 0.0, 0.0]; KL = 0.0;
 JR = [0.0, 0.0, 0.0]; KR = 0.0;
 
 #YSR bound-state energies (in-gap poles of each lead's impurity-dressed surface GF)
@@ -36,7 +35,7 @@ println("YSR energies E/Δ  | L lead: $(round.(EYSR_Ln./delta, digits=5))")
 println("                  | R lead: $(round.(EYSR_Rn./delta, digits=5))")
 
 #voltage
-signed_evar = true;
+signed_evar = false;
 if signed_evar
     Nev1 = 400; evar1 = delta*range(0.24, 3.2, Nev1); evar = [reverse(-evar1); evar1]; Nev = 2*Nev1;
 else
