@@ -2,6 +2,7 @@ CLAUDE.md
 
 Keldyshsetup_Floquetn_Shapiro_ext.jl
 Josephson_Floquetn_Shapiro_ext.jl
+Josephson_Ibias_Floquetn_ext_env.jl
 
 Plots/
 job_scripts/
