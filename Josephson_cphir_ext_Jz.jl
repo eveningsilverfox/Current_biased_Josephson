@@ -11,16 +11,16 @@ using JLD
 
 
 #energies
-mu = 0; delta = 1; zeta = 5; Gamma = 1e-3;
+mu = 0; delta = 1; zeta = 5; Gamma = 5e-2;
 dw1 = Gamma/5; wmax = 2*zeta; #Converges rapidly as wmax increases over delta.
 Nw1 = 2*ceil(Int, wmax/dw1); war1 = -wmax .+ ((0:Nw1-1) .+ 0.5) .* (2*wmax/Nw1); # even-count midpoint sampling: PH-symmetric, no sample on the T=0 step at w=0
 
 #transparency: fixed (transparency set by T/zeta)
-T = 0.6;
+T = 1.0;
 
 #exchange sweep: JL = Jz * nL, NJ points linear in Jz
 #(the YSR zero-energy crossing is near Jz ~ 5.5 for KL = 0-1; refine the range around it if needed)
-NJ = 17; Jzmin = 0.0; Jzmax = 8.0; Jzar = range(Jzmin, Jzmax, NJ);
+NJ = 200; Jzmin = 0.0; Jzmax = 8.0; Jzar = range(Jzmin, Jzmax, NJ);
 
 #classical-spin impurities (units of Delta): J = (Jx,Jy,Jz) exchange, K potential
 #  J=K=0  -> non-magnetic (reproduces 2x the original 2x2 I(phi))
@@ -34,7 +34,11 @@ Nphi = 50; phiar = 2*pi*range(0.0, 1.0, Nphi);
 
 # --- Floquet-machinery CPR (currentPhi_eq_Floquet_Tfull) discretisation knobs ---
 Omega_cpr = 0.4
-Nf_cpr = ceil(Int, 2*zeta/Omega_cpr)                                        # (Nf_cpr+0.5)*Omega_cpr >= 2*zeta, i.e. past the band edge sqrt(4 zeta^2 + delta^2)
+# The energy window (Nf_cpr+0.5)*Omega_cpr must cover the band edge sqrt(4 zeta^2 + delta^2) AND, once an on-site
+# potential V = |J| + |K| exceeds zeta, the impurity split-off state outside the band at |E| ~ V + zeta^2/V
+Vimp_max = max(maximum(abs.(Jzar)) + abs(KL), norm(JR) + abs(KR))           # largest on-site potential on either lead
+Emax = Vimp_max > zeta ? max(sqrt(4*zeta^2 + delta^2), Vimp_max + zeta^2/Vimp_max) : sqrt(4*zeta^2 + delta^2)
+Nf_cpr = ceil(Int, (Emax + 1.0)/Omega_cpr)                                  # +1.0 margin (Gamma tails, delta shift); 32 for Jz <= 8, KL = 1
 dw_cpr = minimum([0.015, Gamma/2.0])
 
 #naming
@@ -46,7 +50,6 @@ str1 = "ext_delta$(fnum(delta))_zeta$(fnum(zeta))_T$(fnum(T))_Gam$(fnum(Gamma))_
 cphiJz = zeros(Float64, NJ, Nphi);   # CPR I(phi) at each Jz
 IcpJz  = zeros(Float64, NJ);         # forward  Ic+
 IcmJz  = zeros(Float64, NJ);         # backward Ic-
-etaJz  = zeros(Float64, NJ);         # diode efficiency (0 if reciprocal)
 RNJz   = zeros(Float64, NJ);         # normal-state resistance
 EYSRJz = zeros(Float64, NJ);         # left-lead YSR energy (positive in-gap pole)
 for gh = 1:NJ
@@ -57,10 +60,9 @@ for gh = 1:NJ
     end
     IcpJz[gh] =  maximum(cphiJz[gh,:]);
     IcmJz[gh] = -minimum(cphiJz[gh,:]);
-    etaJz[gh] = (IcpJz[gh] - IcmJz[gh]) / (IcpJz[gh] + IcmJz[gh]);
     RNJz[gh]  = Keldyshsetup_Floquetn_ext.RN_full(22, dw1, zeta, delta, T, Gamma, JL, KL, JR, KR);
     EYSRJz[gh] = Keldyshsetup_Floquetn_ext.ysr_energies_numerical(JL, KL, zeta, delta)[2];
-    println("Jz = $(round(Jzar[gh], sigdigits=4)) : eps = $(round(EYSRJz[gh], sigdigits=4)), Ic+ = $(round(IcpJz[gh], sigdigits=4)), Ic- = $(round(IcmJz[gh], sigdigits=4)), eta = $(round(etaJz[gh], sigdigits=3)), RN = $(round(RNJz[gh], sigdigits=4))");
+    println("Jz = $(round(Jzar[gh], sigdigits=4)) : eps = $(round(EYSRJz[gh], sigdigits=4)), Ic+ = $(round(IcpJz[gh], sigdigits=4)), Ic- = $(round(IcmJz[gh], sigdigits=4)), RN = $(round(RNJz[gh], sigdigits=4))");
 end
 
 # I(phi) = sum_n [ A_n sin(n phi) + B_n cos(n phi) ].
@@ -81,30 +83,6 @@ save("cphirJz_" * str1 * ".jld", "phiar", collect(phiar), "Jzar", collect(Jzar),
      "IcpJz", IcpJz, "IcmJz", IcmJz, "RNJz", RNJz, "EYSRJz", EYSRJz, "A1Jz", A1Jz, "B1Jz", B1Jz, "A2Jz", A2Jz);
 
 ## ----------Plots----------
-p1 = plot(Jzar, IcpJz .* RNJz, lc = "#1f5fb4", lw = 2.4, marker = :circle, ms = 4, label = L"I_c^{+}eR_N/\Delta")
-plot!(p1, Jzar, IcmJz .* RNJz, lc = :red, lw = 2.4, alpha = 0.45, marker = :diamond, ms = 4, label = L"I_c^{-}eR_N/\Delta")
-plot!(p1, framestyle = :box, size = (640, 480),
-          legend = :topright, legendfontsize = 11,
-          left_margin = 5Plots.mm, bottom_margin = 5Plots.mm,
-          right_margin = 4Plots.mm, top_margin = 4Plots.mm,
-          tickfontsize = 14, guidefontsize = 18,
-          grid = true, gridalpha = 0.18, gridstyle = :dot)
-xlabel!(p1, L"J_z/\Delta")
-ylabel!(p1, L"I_c\,eR_N/\Delta")
-savefig(plot!(p1, dpi = 450), "IcJz_" * str1 * ".png")
-
-p2 = plot(Jzar, etaJz, lc = "#1f5fb4", lw = 2.4, marker = :circle, ms = 4)
-hline!(p2, [0.0], lc = :gray, lw = 1.0, alpha = 0.6)
-plot!(p2, framestyle = :box, size = (640, 480),
-          legend = false,
-          left_margin = 5Plots.mm, bottom_margin = 5Plots.mm,
-          right_margin = 4Plots.mm, top_margin = 4Plots.mm,
-          tickfontsize = 14, guidefontsize = 18,
-          grid = true, gridalpha = 0.18, gridstyle = :dot)
-xlabel!(p2, L"J_z/\Delta")
-ylabel!(p2, L"\eta")
-savefig(plot!(p2, dpi = 450), "etaJz_" * str1 * ".png")
-
 jidx = unique(round.(Int, range(1, NJ, 6)));
 cols = palette(:viridis, length(jidx));
 p3 = plot(phiar ./ pi, cphiJz[jidx[1],:] .* (RNJz[jidx[1]]/delta), lc = cols[1], lw = 2.0, label = L"J_z=%$(round(Jzar[jidx[1]], sigdigits=3))")
@@ -124,13 +102,14 @@ xlabel!(p3, L"\phi/\pi")
 ylabel!(p3, L"I(\phi)\,eR_N/\Delta")
 savefig(plot!(p3, dpi = 450), "cprJz_" * str1 * ".png")
 
-# signed harmonics (not |.|) so the sign change of A1 at the crossing is visible
-p4 = plot(Jzar, A1Jz .* (RNJz ./ delta), lc = "#1f5fb4", lw = 2.4, marker = :circle, ms = 4, label = L"A_1eR_N/\Delta\ \ (\sin\phi)")
-plot!(p4, Jzar, A2Jz .* (RNJz ./ delta), lc = :darkorange, lw = 2.4, marker = :utriangle, ms = 4, label = L"A_2eR_N/\Delta\ \ (\sin2\phi)")
-plot!(p4, Jzar, B1Jz .* (RNJz ./ delta), lc = :red, lw = 2.4, marker = :diamond, ms = 4, label = L"B_1eR_N/\Delta\ \ (\cos\phi)")
+# signed harmonics so the sign change of A1 at the crossing is visible
+# cos(n phi) curves are not plotted: for this collinear setup I(phi) is exactly odd (B1, B2 ~ 1e-16, machine zero).
+# A1 zero at 5.6645 / 5.6785 / 5.8090 for T = 0.6 / 1.0 / 2.0
+p4 = plot(Jzar, A1Jz .* (RNJz ./ delta), lc = "#1f5fb4", lw = 2.4, label = L"A_1eR_N/\Delta\ \ (\sin\phi)")
+plot!(p4, Jzar, A2Jz .* (RNJz ./ delta), lc = :darkorange, lw = 2.4, label = L"A_2eR_N/\Delta\ \ (\sin2\phi)")
 hline!(p4, [0.0], lc = :gray, lw = 1.0, alpha = 0.6, label = "")
 plot!(p4, framestyle = :box, size = (640, 480),
-          legend = :topright, legendfontsize = 11,
+          legend = :bottomleft, legendfontsize = 11,
           left_margin = 5Plots.mm, bottom_margin = 5Plots.mm,
           right_margin = 4Plots.mm, top_margin = 4Plots.mm,
           tickfontsize = 14, guidefontsize = 18,
@@ -139,7 +118,7 @@ xlabel!(p4, L"J_z/\Delta")
 ylabel!(p4, L"I\,eR_N/\Delta")
 savefig(plot!(p4, dpi = 450), "cprharmJz_" * str1 * ".png")
 
-p5 = plot(Jzar, EYSRJz ./ delta, lc = "#1f5fb4", lw = 2.4, marker = :circle, ms = 4, legend = false)
+p5 = plot(Jzar, EYSRJz ./ delta, lc = "#1f5fb4", lw = 2.4, legend = false)
 hline!(p5, [0.0], lc = :gray, lw = 1.0, alpha = 0.6)
 plot!(p5, framestyle = :box, size = (640, 480),
           left_margin = 5Plots.mm, bottom_margin = 5Plots.mm,
